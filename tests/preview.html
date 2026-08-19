@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=1200">
+    <title>NekoCoffee UI Preview</title>
+    <link href="/core.css" rel="stylesheet">
+    <link href="/nekocoffee.css" rel="stylesheet">
+    <style>
+        html, body { margin: 0; min-height: 100%; background: #1782dd; }
+        body { font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; }
+        .preview-header { height: 76px; color: #fff; background: rgba(4, 76, 149, .26); }
+        .preview-header div { box-sizing: border-box; width: 1160px; margin: 0 auto; padding-top: 24px; font-size: 20px; }
+        .preview-header span { margin-left: 16px; color: rgba(255,255,255,.68); font-size: 12px; }
+        .preview-nav { display: flex; width: 1160px; margin: 0 auto; padding: 26px 0 20px; }
+        .preview-nav a { width: 220px; padding: 16px 0; border: 1px solid rgba(255,255,255,.7); border-radius: 8px; color: #fff; text-align: center; background: rgba(255,255,255,.23); }
+        .preview-footer { padding: 24px; color: rgba(255,255,255,.62); font-size: 11px; text-align: center; }
+    </style>
+</head>
+<body>
+<div class="preview-header"><div>小米路由器 <span>扩展设置</span></div></div>
+<div class="preview-nav"><a>NekoCoffee</a></div>
+<div id="bd" class="xqext-page nekocoffee-page">
+    <div class="xqext-titlebar nekocoffee-titlebar">
+        <div>
+            <p class="xqext-eyebrow">MWEF · NEKOCOFFEE</p>
+            <h2>NekoCoffee</h2>
+            <p class="xqext-subtitle" data-i18n="subtitle">轻量 ShellClash 控制中心</p>
+        </div>
+        <div id="nekocoffee-live" class="nekocoffee-live is-loading"><i></i><span data-i18n="connecting">正在连接</span></div>
+    </div>
+    <div id="nekocoffee-message" class="mwef-message" hidden></div>
+    <section class="nekocoffee-overview" aria-labelledby="nekocoffee-service-title">
+        <div class="nekocoffee-section-head">
+            <div><h3 id="nekocoffee-service-title" data-i18n="serviceControl">服务控制</h3><p id="nekocoffee-installation">正在检测 ShellClash 安装…</p></div>
+            <button id="nekocoffee-dashboard" class="mwef-btn mwef-btn-primary nekocoffee-dashboard" type="button" disabled><span data-i18n="openDashboard">打开控制面板</span><b>↗</b></button>
+        </div>
+        <div class="nekocoffee-status-grid">
+            <div class="nekocoffee-stat"><span data-i18n="serviceStatus">服务状态</span><strong id="nekocoffee-service-state">--</strong></div>
+            <div class="nekocoffee-stat"><span data-i18n="coreVersion">核心版本</span><strong id="nekocoffee-core-version">--</strong></div>
+            <div class="nekocoffee-stat"><span data-i18n="proxyMode">代理模式</span><strong id="nekocoffee-proxy-mode">--</strong></div>
+            <div class="nekocoffee-stat"><span data-i18n="dnsMode">DNS 模式</span><strong id="nekocoffee-dns-summary">--</strong></div>
+        </div>
+        <div class="nekocoffee-service-actions">
+            <button class="mwef-btn mwef-btn-primary" type="button" data-control="start" data-i18n="start" disabled>启动</button>
+            <button class="mwef-btn" type="button" data-control="restart" data-i18n="restart" disabled>重启</button>
+            <button class="mwef-btn mwef-btn-danger" type="button" data-control="stop" data-i18n="stop" disabled>停止</button>
+        </div>
+        <p id="nekocoffee-dashboard-warning" class="nekocoffee-warning" hidden></p>
+    </section>
+    <section class="mwef-section" aria-labelledby="nekocoffee-modes-title">
+        <h3 id="nekocoffee-modes-title" class="mwef-section-title" data-i18n="modeSettings">模式设置</h3>
+        <div class="mwef-form-row">
+            <label data-i18n="proxyMode">代理模式</label>
+            <div class="mwef-control"><div class="nekocoffee-segmented" role="group"><button type="button" data-proxy-mode="rule" data-i18n="ruleMode" disabled>规则</button><button type="button" data-proxy-mode="global" data-i18n="globalMode" disabled>全局</button><button type="button" data-proxy-mode="direct" data-i18n="directMode" disabled>直连</button></div><p class="mwef-tip" data-i18n="proxyModeTip">在线切换 Clash 运行模式，无需重启服务。</p></div>
+        </div>
+        <div class="mwef-form-row"><label for="nekocoffee-traffic-mode" data-i18n="trafficMode">流量接管</label><div class="mwef-control"><select id="nekocoffee-traffic-mode" class="mwef-select" disabled></select><p class="mwef-tip" data-i18n="trafficModeTip">选择 ShellCrash 的透明代理实现。</p></div></div>
+        <div class="mwef-form-row"><label for="nekocoffee-dns-mode" data-i18n="dnsEnhancedMode">DNS 增强模式</label><div class="mwef-control"><select id="nekocoffee-dns-mode" class="mwef-select" disabled></select><p class="mwef-tip" data-i18n="dnsModeTip">可在 redirect-host 与 fake-ip 之间切换。</p></div></div>
+        <div class="mwef-form-actions"><button id="nekocoffee-apply-settings" class="mwef-btn mwef-btn-primary" type="button" data-i18n="applySettings" disabled>应用设置</button><p class="mwef-tip" data-i18n="restartAfterApply">服务运行时将自动重启一次以载入新配置。</p></div>
+    </section>
+    <section class="mwef-section" aria-labelledby="nekocoffee-ip-title">
+        <div class="nekocoffee-section-head nekocoffee-section-head-compact"><div><h3 id="nekocoffee-ip-title" class="mwef-section-title" data-i18n="ipCheck">出口 IP 检测</h3><p data-i18n="ipCheckTip">检测路由出口与本地混合代理端口的公网 IPv4。</p></div><button id="nekocoffee-check-ip" class="mwef-btn mwef-btn-small" type="button" data-i18n="checkNow" disabled>立即检测</button></div>
+        <div class="nekocoffee-ip-grid"><div class="nekocoffee-ip-card"><span data-i18n="routerEgress">路由出口</span><strong id="nekocoffee-direct-ip">--</strong><small id="nekocoffee-direct-note" data-i18n="notChecked">尚未检测</small></div><div class="nekocoffee-ip-card"><span data-i18n="proxyEgress">代理端口出口</span><strong id="nekocoffee-proxy-ip">--</strong><small id="nekocoffee-proxy-note" data-i18n="notChecked">尚未检测</small></div></div>
+    </section>
+    <section class="nekocoffee-meta"><span><b data-i18n="installationPath">安装路径</b><code id="nekocoffee-root">--</code></span><span><b data-i18n="shellVersion">Shell 版本</b><code id="nekocoffee-shell-version">--</code></span><span><b>PID</b><code id="nekocoffee-pid">--</code></span></section>
+</div>
+<div class="preview-footer">NekoCoffee local visual fixture · no router changes</div>
+<script>window.NEKOCOFFEE_CONFIG = { apiUrl: '/api', i18nUrl: '/i18n.json', interval: 300 };</script>
+<script src="/nekocoffee.js"></script>
+</body>
+</html>

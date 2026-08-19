@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "mwef-app-nekocoffee",
+  "name": {
+    "zh-CN": "NekoCoffee",
+    "en": "NekoCoffee"
+  },
+  "version": "1.0.0",
+  "description": {
+    "zh-CN": "符合小米原生 WebUI 风格的轻量 ShellClash / ShellCrash 控制面板。",
+    "en": "A lightweight Xiaomi WebUI-style control panel for ShellClash / ShellCrash."
+  },
+  "author": "VlHash",
+  "license": "MIT",
+  "mwef": ">=0.2.0",
+  "permissions": [
+    "system.read",
+    "filesystem.read",
+    "filesystem.write",
+    "network.client",
+    "service.control",
+    "shell.execute"
+  ],
+  "entrypoints": {
+    "web": "/web/xqext/nekocoffee",
+    "api": "/web/xqext/nekocoffee_api"
+  },
+  "navigation": {
+    "label": {
+      "zh-CN": "NekoCoffee",
+      "en": "NekoCoffee"
+    },
+    "route": ["web", "xqext", "nekocoffee"],
+    "order": 30
+  }
+}
