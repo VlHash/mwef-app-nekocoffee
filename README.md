@@ -1,38 +1,45 @@
 # NekoCoffee for MWEF
 
-NekoCoffee 是一款面向小米路由器原生 WebUI 的轻量 ShellClash / ShellCrash 控制插件。它通过 MWEF 的认证 LuCI 路由提供服务控制、运行模式切换、DNS 模式切换、控制面板入口和出口 IP 检测，不引入前端框架或第三方静态依赖。
+Keeping a small cat—or perhaps a neko—comfortable on a Xiaomi router. This is a lightweight playground for a local traffic companion, shaped to feel at home in the stock Xiaomi WebUI.
 
-## 功能
+NekoCoffee uses authenticated MWEF/LuCI routes and ships without a frontend framework or third-party browser assets.
 
-- 查看 ShellClash / ShellCrash、核心版本和运行状态
-- 启动、停止、重启服务
-- 在线切换 Rule / Global / Direct 代理模式
-- 切换流量接管模式与 `redirect-host` / `fake-ip` DNS 模式
-- 开关 IPv6 透明代理与 QUIC 代理
-- 上传本地 Clash YAML、从公网 HTTPS 导入并切换配置文件
-- 一键打开本机控制面板
-- 通过三个固定检测源回退，分别检测路由出口与本地混合代理端口的公网 IPv4
-- 简体中文与 English
+## What the cat can do
 
-## 安全设计
+- Show the companion's health, version, core build, and current route persona
+- Start, stop, or gently restart the local neko service
+- Move between Rule, Global, and Direct runtime personas without a restart
+- Tune traffic interception and choose a redirect-host or fake-address DNS persona
+- Enable or disable IPv6 handling and QUIC handling
+- Upload local YAML profiles, import one from a public HTTPS address, and switch profiles
+- Open the local dashboard in one click
+- Compare the router exit with the neko-mixed-port exit using multiple fallback observers
+- Speak Simplified Chinese or English in the router UI
 
-- 所有接口沿用小米 LuCI `;stok=` 会话，不开放额外监听端口。
-- 所有写操作仅接受固定动作和枚举值；Web 参数不会作为命令或路径执行。
-- IP 检测仅访问代码内固定的 HTTPS 服务，并设置超时和响应长度限制；直连与代理结果互不影响。
-- 配置上传限制为 2 MiB，只接受安全的 `.yaml` / `.yml` 文件名；切换前还会调用代理核心做语义校验。
-- URL 导入只接受解析到公网 IPv4 的 HTTPS 地址，禁用重定向并固定解析结果；订阅链接不会出现在状态数据或日志中。
-- 配置切换只替换 ShellCrash 约定的软链接，重启失败时会恢复旧链接并尝试恢复服务。
-- 不包含 MTD、块设备、Bootloader、固件分区或其他高危操作。
-- 配置写入采用同目录临时文件加原子替换，并保留最近一次 `.nekocoffee.bak` 备份。
-- 若控制面板未设置 secret，页面只给出安全提醒，不会擅自修改现有配置。
+## Safety notes
 
-## 兼容性
+- Every endpoint stays behind the Xiaomi LuCI `;stok=` session; no additional listener is opened.
+- Mutating endpoints accept fixed actions and allow-listed values. Web input is never used as an unchecked command or path.
+- YAML uploads are limited to 2 MiB and safe `.yaml` / `.yml` names. The routing core performs a semantic check before a profile switch.
+- HTTPS imports must resolve to a public IPv4 address. Redirects are disabled and the validated address is pinned for the download.
+- Profile activation replaces only the manager's expected symbolic link. A failed restart restores the previous target and attempts recovery.
+- Exit checks use a small built-in list of HTTPS observers, with strict time and response-size limits.
+- No firmware partitions, boot components, block devices, or other high-risk router areas are touched.
+- If the local dashboard has no secret, NekoCoffee shows a warning and leaves the existing setup unchanged.
 
-已针对 ShellCrash `1.9.5beta3` / Meta 核心验证配置结构，并兼容常见的 `ShellCrash`、`ShellClash` 安装目录。MWEF 最低版本为 `0.2.0`。
+## Compatibility
 
-## 构建
+The current build has been exercised with a common neko shell manager in the 1.9.5 beta family and a Meta-style routing core. It also recognizes several conventional persistent-data locations used by similar cat setups. MWEF `0.2.0` or newer is required.
 
-在 MWEF 框架仓库根目录执行，产物会写回本仓库的 `dist/`：
+## Build
+
+From this repository:
+
+```powershell
+.\build.ps1
+```
+
+Or use the MWEF builder directly from the framework repository:
 
 ```powershell
 .\tools\build-plugin.ps1 `
@@ -40,15 +47,11 @@ NekoCoffee 是一款面向小米路由器原生 WebUI 的轻量 ShellClash / She
   -OutputDirectory ..\mwef-app-nekocoffee\dist
 ```
 
-也可以在本仓库执行：
+The resulting archive is written to `dist/mwef-app-nekocoffee-1.1.0.tar.gz`.
 
-```powershell
-.\build.ps1
-```
+## Install
 
-## 安装
-
-在 MWEF 的“框架设置”中上传 `dist/mwef-app-nekocoffee-1.1.0.tar.gz`，审阅并授予所请求权限，然后启用插件。改变模式、IPv6/QUIC 设置或切换配置文件时，运行中的 ShellCrash 会在确认后重启一次以载入配置。
+Upload the archive from MWEF Framework Settings, review the requested permissions, and enable the plugin. Changes that require a neko restart always ask for confirmation first.
 
 ## License
 

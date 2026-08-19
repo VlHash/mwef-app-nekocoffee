@@ -137,8 +137,8 @@
         var labels = {
             redir_host: tr('modeRedirectHost', 'redirect-host（兼容）'),
             'fake-ip': tr('modeFakeIp', 'fake-ip（增强）'),
-            mix: tr('modeDnsMix', 'mix（ShellCrash 兼容）'),
-            route: tr('modeDnsRoute', 'route（ShellCrash 兼容）')
+            mix: tr('modeDnsMix', 'mix（Neko 管理器兼容）'),
+            route: tr('modeDnsRoute', 'route（Neko 管理器兼容）')
         };
         return labels[value] || value || '--';
     }
@@ -224,7 +224,7 @@
             ? (installation.name || 'ShellClash') + ' ' + (installation.version || '')
             : (data.permissionMissing && data.permissionMissing.length
                 ? tr('permissionMissing', '缺少所需插件权限，请在框架设置中授权。')
-                : tr('notInstalled', '未找到兼容的 ShellClash / ShellCrash 安装')));
+                : tr('notInstalled', '未找到兼容的 Neko 运行环境')));
         setText('nekocoffee-service-state', installed
             ? (running ? tr('running', '运行中') : tr('stopped', '已停止')) : '--');
         byId('nekocoffee-service-state').className = running ? 'is-running' : 'is-stopped';

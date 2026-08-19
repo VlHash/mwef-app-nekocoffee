@@ -23,7 +23,7 @@ local pageTitle = language == "en" and "NekoCoffee - Extension Settings" or "Nek
         <div class="xqext-titlebar nekocoffee-titlebar">
             <div>
                 <h2>NekoCoffee</h2>
-                <p class="xqext-subtitle" data-i18n="subtitle">轻量 ShellClash 控制中心</p>
+                <p class="xqext-subtitle" data-i18n="subtitle">轻量 Neko 控制中心</p>
             </div>
             <div id="nekocoffee-live" class="nekocoffee-live is-loading">
                 <i></i><span data-i18n="connecting">正在连接</span>
@@ -36,7 +36,7 @@ local pageTitle = language == "en" and "NekoCoffee - Extension Settings" or "Nek
             <div class="nekocoffee-section-head">
                 <div>
                     <h3 id="nekocoffee-service-title" data-i18n="serviceControl">服务控制</h3>
-                    <p id="nekocoffee-installation" data-i18n="detectingInstallation">正在检测 ShellClash 安装…</p>
+                    <p id="nekocoffee-installation" data-i18n="detectingInstallation">正在寻找兼容的 Neko 运行环境…</p>
                 </div>
                 <button id="nekocoffee-dashboard" class="mwef-btn mwef-btn-primary nekocoffee-dashboard" type="button" disabled>
                     <span data-i18n="openDashboard">打开控制面板</span><b aria-hidden="true">↗</b>
@@ -81,7 +81,7 @@ local pageTitle = language == "en" and "NekoCoffee - Extension Settings" or "Nek
                         <button type="button" data-proxy-mode="global" data-i18n="globalMode" disabled>全局</button>
                         <button type="button" data-proxy-mode="direct" data-i18n="directMode" disabled>直连</button>
                     </div>
-                    <p class="mwef-tip" data-i18n="proxyModeTip">在线切换 Clash 运行模式，无需重启服务。</p>
+                    <p class="mwef-tip" data-i18n="proxyModeTip">在线切换 Neko 运行形态，无需重启服务。</p>
                 </div>
             </div>
 
@@ -96,7 +96,7 @@ local pageTitle = language == "en" and "NekoCoffee - Extension Settings" or "Nek
                             <option value="Tun" data-i18n="modeTun">TUN 模式</option>
                         </select>
                     </span>
-                    <p class="mwef-tip" data-i18n="trafficModeTip">选择 ShellCrash 的透明代理实现。</p>
+                    <p class="mwef-tip" data-i18n="trafficModeTip">选择猫咪使用的透明流量接管方式。</p>
                 </div>
             </div>
 
@@ -107,8 +107,8 @@ local pageTitle = language == "en" and "NekoCoffee - Extension Settings" or "Nek
                         <select id="nekocoffee-dns-mode" name="dnsMode" class="beautify" style="width: 498px;" disabled>
                             <option value="redir_host" data-i18n="modeRedirectHost">redirect-host（兼容）</option>
                             <option value="fake-ip" data-i18n="modeFakeIp">fake-ip（增强）</option>
-                            <option value="mix" data-i18n="modeDnsMix" disabled>mix（ShellCrash 兼容）</option>
-                            <option value="route" data-i18n="modeDnsRoute" disabled>route（ShellCrash 兼容）</option>
+                            <option value="mix" data-i18n="modeDnsMix" disabled>mix（Neko 管理器兼容）</option>
+                            <option value="route" data-i18n="modeDnsRoute" disabled>route（Neko 管理器兼容）</option>
                         </select>
                     </span>
                     <p class="mwef-tip" data-i18n="dnsModeTip">切换 fake-ip 时会关闭与其不兼容的中国 IPv4/IPv6 绕过。</p>
@@ -123,7 +123,7 @@ local pageTitle = language == "en" and "NekoCoffee - Extension Settings" or "Nek
                         <span class="nekocoffee-toggle-track"><i></i></span>
                     </label>
                     <span id="nekocoffee-ipv6-proxy-state" class="nekocoffee-toggle-state">--</span>
-                    <p class="mwef-tip" data-i18n="ipv6ProxyTip">启用 ShellCrash 的 IPv6 透明代理接管。</p>
+                    <p class="mwef-tip" data-i18n="ipv6ProxyTip">让 Neko 伴侣透明接管 IPv6 流量。</p>
                 </div>
             </div>
 
@@ -155,7 +155,7 @@ local pageTitle = language == "en" and "NekoCoffee - Extension Settings" or "Nek
                     <button id="nekocoffee-choose-config" class="mwef-btn" type="button" data-i18n="chooseFile" disabled>选择文件</button>
                     <button id="nekocoffee-upload-config" class="mwef-btn mwef-btn-primary" type="button" data-i18n="upload" disabled>上传</button>
                     <span id="nekocoffee-selected-file" class="nekocoffee-file-name" data-i18n="noFileSelected">未选择文件</span>
-                    <p class="mwef-tip" data-i18n="uploadConfigTip">支持最大 2 MiB 的 Clash YAML；上传后不会自动切换。</p>
+                    <p class="mwef-tip" data-i18n="uploadConfigTip">支持最大 2 MiB 的路由 YAML；上传后不会自动切换。</p>
                 </div>
             </div>
 
