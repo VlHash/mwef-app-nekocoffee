@@ -1,0 +1,231 @@
+<%
+local ver = require("xiaoqiang.XQVersion").webVersion
+local json = require("luci.json")
+local fs = require("nixio.fs")
+local apiUrl = luci.dispatcher.build_url("web", "xqext", "nekocoffee_api")
+local language = (fs.readfile("/data/other_vol/xqext/config/language") or "zh-CN"):match("^%s*(.-)%s*$")
+if language ~= "en" and language ~= "zh-CN" then language = "zh-CN" end
+local pageTitle = language == "en" and "NekoCoffee - Extension Settings" or "NekoCoffee - 扩展设置"
+%>
+<%include("web/inc/head")%>
+<title><%=pageTitle%></title>
+<meta name="viewport" content="width=1200">
+<link href="<%=resource%>/web/css/bc.css?v=<%=ver%>" rel="stylesheet">
+<link href="<%=resource%>/web/css/layout.css?v=<%=ver%>" rel="stylesheet">
+<link href="/xqext/core.css?v=0.2.3" rel="stylesheet">
+<link href="/xqext/plugins/mwef-app-nekocoffee/nekocoffee.css?v=1.1.0" rel="stylesheet">
+</head>
+<body>
+<div id="doc">
+    <%include("web/inc/header")%>
+    <%include("web/xqext/nav")%>
+    <div id="bd" class="xqext-page nekocoffee-page">
+        <div class="xqext-titlebar nekocoffee-titlebar">
+            <div>
+                <h2>NekoCoffee</h2>
+                <p class="xqext-subtitle" data-i18n="subtitle">轻量 Neko 控制中心</p>
+            </div>
+            <div id="nekocoffee-live" class="nekocoffee-live is-loading">
+                <i></i><span data-i18n="connecting">正在连接</span>
+            </div>
+        </div>
+
+        <div id="nekocoffee-message" class="mwef-message" hidden></div>
+
+        <section class="nekocoffee-overview" aria-labelledby="nekocoffee-service-title">
+            <div class="nekocoffee-section-head">
+                <div>
+                    <h3 id="nekocoffee-service-title" data-i18n="serviceControl">服务控制</h3>
+                    <p id="nekocoffee-installation" data-i18n="detectingInstallation">正在寻找兼容的 Neko 运行环境…</p>
+                </div>
+                <button id="nekocoffee-dashboard" class="mwef-btn mwef-btn-primary nekocoffee-dashboard" type="button" disabled>
+                    <span data-i18n="openDashboard">打开控制面板</span><b aria-hidden="true">↗</b>
+                </button>
+            </div>
+
+            <div class="nekocoffee-status-grid">
+                <div class="nekocoffee-stat">
+                    <span data-i18n="serviceStatus">服务状态</span>
+                    <strong id="nekocoffee-service-state">--</strong>
+                </div>
+                <div class="nekocoffee-stat">
+                    <span data-i18n="coreVersion">核心版本</span>
+                    <strong id="nekocoffee-core-version">--</strong>
+                </div>
+                <div class="nekocoffee-stat">
+                    <span data-i18n="proxyMode">代理模式</span>
+                    <strong id="nekocoffee-proxy-mode">--</strong>
+                </div>
+                <div class="nekocoffee-stat">
+                    <span data-i18n="dnsMode">DNS 模式</span>
+                    <strong id="nekocoffee-dns-summary">--</strong>
+                </div>
+            </div>
+
+            <div class="nekocoffee-service-actions">
+                <button class="mwef-btn mwef-btn-primary" type="button" data-control="start" data-i18n="start" disabled>启动</button>
+                <button class="mwef-btn" type="button" data-control="restart" data-i18n="restart" disabled>重启</button>
+                <button class="mwef-btn mwef-btn-danger" type="button" data-control="stop" data-i18n="stop" disabled>停止</button>
+            </div>
+            <p id="nekocoffee-dashboard-warning" class="nekocoffee-warning" hidden></p>
+        </section>
+
+        <section id="nekocoffee-mode-settings" class="mwef-section" aria-labelledby="nekocoffee-modes-title">
+            <h3 id="nekocoffee-modes-title" class="mwef-section-title" data-i18n="modeSettings">模式设置</h3>
+
+            <div class="mwef-form-row">
+                <label data-i18n="proxyMode">代理模式</label>
+                <div class="mwef-control">
+                    <div id="nekocoffee-proxy-buttons" class="nekocoffee-segmented" role="group" aria-label="Proxy mode">
+                        <button type="button" data-proxy-mode="rule" data-i18n="ruleMode" disabled>规则</button>
+                        <button type="button" data-proxy-mode="global" data-i18n="globalMode" disabled>全局</button>
+                        <button type="button" data-proxy-mode="direct" data-i18n="directMode" disabled>直连</button>
+                    </div>
+                    <p class="mwef-tip" data-i18n="proxyModeTip">在线切换 Neko 运行形态，无需重启服务。</p>
+                </div>
+            </div>
+
+            <div class="mwef-form-row form-item-select">
+                <label class="k" for="nekocoffee-traffic-mode" data-i18n="trafficMode">流量接管</label>
+                <div class="mwef-control">
+                    <span class="v mwef-native-select is-disabled">
+                        <select id="nekocoffee-traffic-mode" name="trafficMode" class="beautify" style="width: 498px;" disabled>
+                            <option value="Mix" data-i18n="modeMix">混合模式（推荐）</option>
+                            <option value="Redir" data-i18n="modeRedir">Redir 模式</option>
+                            <option value="Tproxy" data-i18n="modeTproxy">TProxy 模式</option>
+                            <option value="Tun" data-i18n="modeTun">TUN 模式</option>
+                        </select>
+                    </span>
+                    <p class="mwef-tip" data-i18n="trafficModeTip">选择猫咪使用的透明流量接管方式。</p>
+                </div>
+            </div>
+
+            <div class="mwef-form-row form-item-select">
+                <label class="k" for="nekocoffee-dns-mode" data-i18n="dnsEnhancedMode">DNS 增强模式</label>
+                <div class="mwef-control">
+                    <span class="v mwef-native-select is-disabled">
+                        <select id="nekocoffee-dns-mode" name="dnsMode" class="beautify" style="width: 498px;" disabled>
+                            <option value="redir_host" data-i18n="modeRedirectHost">redirect-host（兼容）</option>
+                            <option value="fake-ip" data-i18n="modeFakeIp">fake-ip（增强）</option>
+                            <option value="mix" data-i18n="modeDnsMix" disabled>mix（Neko 管理器兼容）</option>
+                            <option value="route" data-i18n="modeDnsRoute" disabled>route（Neko 管理器兼容）</option>
+                        </select>
+                    </span>
+                    <p class="mwef-tip" data-i18n="dnsModeTip">切换 fake-ip 时会关闭与其不兼容的中国 IPv4/IPv6 绕过。</p>
+                </div>
+            </div>
+
+            <div class="mwef-form-row">
+                <label for="nekocoffee-ipv6-proxy" data-i18n="ipv6Proxy">IPv6 代理</label>
+                <div class="mwef-control nekocoffee-toggle-control">
+                    <label class="nekocoffee-toggle">
+                        <input id="nekocoffee-ipv6-proxy" type="checkbox" disabled>
+                        <span class="nekocoffee-toggle-track"><i></i></span>
+                    </label>
+                    <span id="nekocoffee-ipv6-proxy-state" class="nekocoffee-toggle-state">--</span>
+                    <p class="mwef-tip" data-i18n="ipv6ProxyTip">让 Neko 伴侣透明接管 IPv6 流量。</p>
+                </div>
+            </div>
+
+            <div class="mwef-form-row">
+                <label for="nekocoffee-quic-proxy" data-i18n="quicProxy">QUIC 代理</label>
+                <div class="mwef-control nekocoffee-toggle-control">
+                    <label class="nekocoffee-toggle">
+                        <input id="nekocoffee-quic-proxy" type="checkbox" disabled>
+                        <span class="nekocoffee-toggle-track"><i></i></span>
+                    </label>
+                    <span id="nekocoffee-quic-proxy-state" class="nekocoffee-toggle-state">--</span>
+                    <p class="mwef-tip" data-i18n="quicProxyTip">关闭时拦截 UDP 443/8443，减少 QUIC 绕过；开启时允许代理核心处理。</p>
+                </div>
+            </div>
+
+            <div class="mwef-form-actions">
+                <button id="nekocoffee-apply-settings" class="mwef-btn mwef-btn-primary" type="button" data-i18n="applySettings" disabled>应用设置</button>
+                <p class="mwef-tip" data-i18n="restartAfterApply">服务运行时将自动重启一次以载入新配置。</p>
+            </div>
+        </section>
+
+        <section class="mwef-section" aria-labelledby="nekocoffee-profiles-title">
+            <h3 id="nekocoffee-profiles-title" class="mwef-section-title" data-i18n="configProfiles">配置文件</h3>
+
+            <div class="mwef-form-row">
+                <label for="nekocoffee-config-file" data-i18n="uploadConfig">上传配置</label>
+                <div class="mwef-control">
+                    <input id="nekocoffee-config-file" class="nekocoffee-file-input" type="file" accept=".yaml,.yml,text/yaml,application/yaml">
+                    <button id="nekocoffee-choose-config" class="mwef-btn" type="button" data-i18n="chooseFile" disabled>选择文件</button>
+                    <button id="nekocoffee-upload-config" class="mwef-btn mwef-btn-primary" type="button" data-i18n="upload" disabled>上传</button>
+                    <span id="nekocoffee-selected-file" class="nekocoffee-file-name" data-i18n="noFileSelected">未选择文件</span>
+                    <p class="mwef-tip" data-i18n="uploadConfigTip">支持最大 2 MiB 的路由 YAML；上传后不会自动切换。</p>
+                </div>
+            </div>
+
+            <div class="mwef-form-row">
+                <label for="nekocoffee-import-url" data-i18n="importUrl">URL 导入</label>
+                <div class="mwef-control">
+                    <input id="nekocoffee-import-url" class="mwef-input nekocoffee-wide-input" type="url" maxlength="1024" placeholder="https://example.com/config.yaml" disabled>
+                    <div class="nekocoffee-import-line">
+                        <input id="nekocoffee-import-name" class="mwef-input" type="text" maxlength="80" placeholder="my-config.yaml" disabled>
+                        <button id="nekocoffee-import-config" class="mwef-btn mwef-btn-primary" type="button" data-i18n="import" disabled>导入</button>
+                    </div>
+                    <p class="mwef-tip" data-i18n="importConfigTip">仅接受公网 HTTPS 地址；链接不会写入状态或日志。</p>
+                </div>
+            </div>
+
+            <div class="nekocoffee-profile-wrap">
+                <table class="nekocoffee-profile-table">
+                    <thead><tr>
+                        <th data-i18n="profileName">名称</th>
+                        <th data-i18n="profileSize">大小</th>
+                        <th data-i18n="profileModified">修改时间</th>
+                        <th data-i18n="profileStatus">状态</th>
+                        <th data-i18n="profileAction">操作</th>
+                    </tr></thead>
+                    <tbody id="nekocoffee-profile-list">
+                        <tr><td colspan="5" class="nekocoffee-empty" data-i18n="loadingProfiles">正在读取配置文件…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="mwef-tip nekocoffee-profile-tip" data-i18n="profileValidationTip">上传时检查文件名、大小和基础结构；切换前再由代理核心校验，运行中会重启服务。</p>
+        </section>
+
+        <section class="mwef-section" aria-labelledby="nekocoffee-ip-title">
+            <div class="nekocoffee-section-head nekocoffee-section-head-compact">
+                <div>
+                    <h3 id="nekocoffee-ip-title" class="mwef-section-title" data-i18n="ipCheck">出口 IP 检测</h3>
+                    <p data-i18n="ipCheckTip">检测路由出口与本地混合代理端口的公网 IPv4。</p>
+                </div>
+                <button id="nekocoffee-check-ip" class="mwef-btn mwef-btn-small" type="button" data-i18n="checkNow" disabled>立即检测</button>
+            </div>
+            <div class="nekocoffee-ip-grid">
+                <div class="nekocoffee-ip-card">
+                    <span data-i18n="routerEgress">路由出口</span>
+                    <strong id="nekocoffee-direct-ip">--</strong>
+                    <small id="nekocoffee-direct-note" data-i18n="notChecked">尚未检测</small>
+                </div>
+                <div class="nekocoffee-ip-card">
+                    <span data-i18n="proxyEgress">代理端口出口</span>
+                    <strong id="nekocoffee-proxy-ip">--</strong>
+                    <small id="nekocoffee-proxy-note" data-i18n="notChecked">尚未检测</small>
+                </div>
+            </div>
+        </section>
+
+        <section class="nekocoffee-meta" aria-label="Installation details">
+            <span><b data-i18n="installationPath">安装路径</b><code id="nekocoffee-root">--</code></span>
+            <span><b data-i18n="shellVersion">Shell 版本</b><code id="nekocoffee-shell-version">--</code></span>
+            <span><b>PID</b><code id="nekocoffee-pid">--</code></span>
+        </section>
+    </div>
+</div>
+<%include("web/inc/footer")%>
+<%include("web/inc/g.js")%>
+<script>
+window.NEKOCOFFEE_CONFIG = {
+    apiUrl: <%=json.encode(apiUrl)%>,
+    i18nUrl: <%=json.encode("/xqext/plugins/mwef-app-nekocoffee/i18n/" .. language .. ".json?v=1.1.0")%>,
+    interval: 5000
+};
+</script>
+<script src="/xqext/plugins/mwef-app-nekocoffee/nekocoffee.js?v=1.1.0"></script>
+</body>
+</html>
