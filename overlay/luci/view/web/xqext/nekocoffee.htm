@@ -13,7 +13,7 @@ local pageTitle = language == "en" and "NekoCoffee - Extension Settings" or "Nek
 <link href="<%=resource%>/web/css/bc.css?v=<%=ver%>" rel="stylesheet">
 <link href="<%=resource%>/web/css/layout.css?v=<%=ver%>" rel="stylesheet">
 <link href="/xqext/core.css?v=0.2.3" rel="stylesheet">
-<link href="/xqext/plugins/mwef-app-nekocoffee/nekocoffee.css?v=1.0.0" rel="stylesheet">
+<link href="/xqext/plugins/mwef-app-nekocoffee/nekocoffee.css?v=1.1.0" rel="stylesheet">
 </head>
 <body>
 <div id="doc">
@@ -22,7 +22,6 @@ local pageTitle = language == "en" and "NekoCoffee - Extension Settings" or "Nek
     <div id="bd" class="xqext-page nekocoffee-page">
         <div class="xqext-titlebar nekocoffee-titlebar">
             <div>
-                <p class="xqext-eyebrow">MWEF · NEKOCOFFEE</p>
                 <h2>NekoCoffee</h2>
                 <p class="xqext-subtitle" data-i18n="subtitle">轻量 ShellClash 控制中心</p>
             </div>
@@ -71,7 +70,7 @@ local pageTitle = language == "en" and "NekoCoffee - Extension Settings" or "Nek
             <p id="nekocoffee-dashboard-warning" class="nekocoffee-warning" hidden></p>
         </section>
 
-        <section class="mwef-section" aria-labelledby="nekocoffee-modes-title">
+        <section id="nekocoffee-mode-settings" class="mwef-section" aria-labelledby="nekocoffee-modes-title">
             <h3 id="nekocoffee-modes-title" class="mwef-section-title" data-i18n="modeSettings">模式设置</h3>
 
             <div class="mwef-form-row">
@@ -86,19 +85,57 @@ local pageTitle = language == "en" and "NekoCoffee - Extension Settings" or "Nek
                 </div>
             </div>
 
-            <div class="mwef-form-row">
-                <label for="nekocoffee-traffic-mode" data-i18n="trafficMode">流量接管</label>
+            <div class="mwef-form-row form-item-select">
+                <label class="k" for="nekocoffee-traffic-mode" data-i18n="trafficMode">流量接管</label>
                 <div class="mwef-control">
-                    <select id="nekocoffee-traffic-mode" class="mwef-select" disabled></select>
+                    <span class="v mwef-native-select is-disabled">
+                        <select id="nekocoffee-traffic-mode" name="trafficMode" class="beautify" style="width: 498px;" disabled>
+                            <option value="Mix" data-i18n="modeMix">混合模式（推荐）</option>
+                            <option value="Redir" data-i18n="modeRedir">Redir 模式</option>
+                            <option value="Tproxy" data-i18n="modeTproxy">TProxy 模式</option>
+                            <option value="Tun" data-i18n="modeTun">TUN 模式</option>
+                        </select>
+                    </span>
                     <p class="mwef-tip" data-i18n="trafficModeTip">选择 ShellCrash 的透明代理实现。</p>
                 </div>
             </div>
 
-            <div class="mwef-form-row">
-                <label for="nekocoffee-dns-mode" data-i18n="dnsEnhancedMode">DNS 增强模式</label>
+            <div class="mwef-form-row form-item-select">
+                <label class="k" for="nekocoffee-dns-mode" data-i18n="dnsEnhancedMode">DNS 增强模式</label>
                 <div class="mwef-control">
-                    <select id="nekocoffee-dns-mode" class="mwef-select" disabled></select>
-                    <p class="mwef-tip" data-i18n="dnsModeTip">可在 redirect-host 与 fake-ip 之间切换。</p>
+                    <span class="v mwef-native-select is-disabled">
+                        <select id="nekocoffee-dns-mode" name="dnsMode" class="beautify" style="width: 498px;" disabled>
+                            <option value="redir_host" data-i18n="modeRedirectHost">redirect-host（兼容）</option>
+                            <option value="fake-ip" data-i18n="modeFakeIp">fake-ip（增强）</option>
+                            <option value="mix" data-i18n="modeDnsMix" disabled>mix（ShellCrash 兼容）</option>
+                            <option value="route" data-i18n="modeDnsRoute" disabled>route（ShellCrash 兼容）</option>
+                        </select>
+                    </span>
+                    <p class="mwef-tip" data-i18n="dnsModeTip">切换 fake-ip 时会关闭与其不兼容的中国 IPv4/IPv6 绕过。</p>
+                </div>
+            </div>
+
+            <div class="mwef-form-row">
+                <label for="nekocoffee-ipv6-proxy" data-i18n="ipv6Proxy">IPv6 代理</label>
+                <div class="mwef-control nekocoffee-toggle-control">
+                    <label class="nekocoffee-toggle">
+                        <input id="nekocoffee-ipv6-proxy" type="checkbox" disabled>
+                        <span class="nekocoffee-toggle-track"><i></i></span>
+                    </label>
+                    <span id="nekocoffee-ipv6-proxy-state" class="nekocoffee-toggle-state">--</span>
+                    <p class="mwef-tip" data-i18n="ipv6ProxyTip">启用 ShellCrash 的 IPv6 透明代理接管。</p>
+                </div>
+            </div>
+
+            <div class="mwef-form-row">
+                <label for="nekocoffee-quic-proxy" data-i18n="quicProxy">QUIC 代理</label>
+                <div class="mwef-control nekocoffee-toggle-control">
+                    <label class="nekocoffee-toggle">
+                        <input id="nekocoffee-quic-proxy" type="checkbox" disabled>
+                        <span class="nekocoffee-toggle-track"><i></i></span>
+                    </label>
+                    <span id="nekocoffee-quic-proxy-state" class="nekocoffee-toggle-state">--</span>
+                    <p class="mwef-tip" data-i18n="quicProxyTip">关闭时拦截 UDP 443/8443，减少 QUIC 绕过；开启时允许代理核心处理。</p>
                 </div>
             </div>
 
@@ -106,6 +143,49 @@ local pageTitle = language == "en" and "NekoCoffee - Extension Settings" or "Nek
                 <button id="nekocoffee-apply-settings" class="mwef-btn mwef-btn-primary" type="button" data-i18n="applySettings" disabled>应用设置</button>
                 <p class="mwef-tip" data-i18n="restartAfterApply">服务运行时将自动重启一次以载入新配置。</p>
             </div>
+        </section>
+
+        <section class="mwef-section" aria-labelledby="nekocoffee-profiles-title">
+            <h3 id="nekocoffee-profiles-title" class="mwef-section-title" data-i18n="configProfiles">配置文件</h3>
+
+            <div class="mwef-form-row">
+                <label for="nekocoffee-config-file" data-i18n="uploadConfig">上传配置</label>
+                <div class="mwef-control">
+                    <input id="nekocoffee-config-file" class="nekocoffee-file-input" type="file" accept=".yaml,.yml,text/yaml,application/yaml">
+                    <button id="nekocoffee-choose-config" class="mwef-btn" type="button" data-i18n="chooseFile" disabled>选择文件</button>
+                    <button id="nekocoffee-upload-config" class="mwef-btn mwef-btn-primary" type="button" data-i18n="upload" disabled>上传</button>
+                    <span id="nekocoffee-selected-file" class="nekocoffee-file-name" data-i18n="noFileSelected">未选择文件</span>
+                    <p class="mwef-tip" data-i18n="uploadConfigTip">支持最大 2 MiB 的 Clash YAML；上传后不会自动切换。</p>
+                </div>
+            </div>
+
+            <div class="mwef-form-row">
+                <label for="nekocoffee-import-url" data-i18n="importUrl">URL 导入</label>
+                <div class="mwef-control">
+                    <input id="nekocoffee-import-url" class="mwef-input nekocoffee-wide-input" type="url" maxlength="1024" placeholder="https://example.com/config.yaml" disabled>
+                    <div class="nekocoffee-import-line">
+                        <input id="nekocoffee-import-name" class="mwef-input" type="text" maxlength="80" placeholder="my-config.yaml" disabled>
+                        <button id="nekocoffee-import-config" class="mwef-btn mwef-btn-primary" type="button" data-i18n="import" disabled>导入</button>
+                    </div>
+                    <p class="mwef-tip" data-i18n="importConfigTip">仅接受公网 HTTPS 地址；链接不会写入状态或日志。</p>
+                </div>
+            </div>
+
+            <div class="nekocoffee-profile-wrap">
+                <table class="nekocoffee-profile-table">
+                    <thead><tr>
+                        <th data-i18n="profileName">名称</th>
+                        <th data-i18n="profileSize">大小</th>
+                        <th data-i18n="profileModified">修改时间</th>
+                        <th data-i18n="profileStatus">状态</th>
+                        <th data-i18n="profileAction">操作</th>
+                    </tr></thead>
+                    <tbody id="nekocoffee-profile-list">
+                        <tr><td colspan="5" class="nekocoffee-empty" data-i18n="loadingProfiles">正在读取配置文件…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="mwef-tip nekocoffee-profile-tip" data-i18n="profileValidationTip">上传时检查文件名、大小和基础结构；切换前再由代理核心校验，运行中会重启服务。</p>
         </section>
 
         <section class="mwef-section" aria-labelledby="nekocoffee-ip-title">
@@ -142,10 +222,10 @@ local pageTitle = language == "en" and "NekoCoffee - Extension Settings" or "Nek
 <script>
 window.NEKOCOFFEE_CONFIG = {
     apiUrl: <%=json.encode(apiUrl)%>,
-    i18nUrl: <%=json.encode("/xqext/plugins/mwef-app-nekocoffee/i18n/" .. language .. ".json?v=1.0.0")%>,
+    i18nUrl: <%=json.encode("/xqext/plugins/mwef-app-nekocoffee/i18n/" .. language .. ".json?v=1.1.0")%>,
     interval: 5000
 };
 </script>
-<script src="/xqext/plugins/mwef-app-nekocoffee/nekocoffee.js?v=1.0.0"></script>
+<script src="/xqext/plugins/mwef-app-nekocoffee/nekocoffee.js?v=1.1.0"></script>
 </body>
 </html>

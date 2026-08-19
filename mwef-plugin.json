@@ -5,7 +5,7 @@
     "zh-CN": "NekoCoffee",
     "en": "NekoCoffee"
   },
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": {
     "zh-CN": "符合小米原生 WebUI 风格的轻量 ShellClash / ShellCrash 控制面板。",
     "en": "A lightweight Xiaomi WebUI-style control panel for ShellClash / ShellCrash."

@@ -5,10 +5,11 @@ local http = require "luci.http"
 local json = require "luci.json"
 
 local PLUGIN_ID = "mwef-app-nekocoffee"
-local VERSION = "1.0.0"
+local VERSION = "1.1.0"
 local MWEF_BASE = "/data/other_vol/xqext"
 local DEFAULT_PLUGIN_DIR = MWEF_BASE .. "/plugins"
 local LOCK_DIR = "/tmp/mwef-nekocoffee.lock"
+local MAX_PROFILE_SIZE = 2 * 1024 * 1024
 
 local installation_roots = {
     "/data/other_vol/ShellCrash",
@@ -205,6 +206,21 @@ local function command_succeeded(result)
     return result == true or result == 0
 end
 
+local function random_suffix()
+    local handle = io.open("/dev/urandom", "rb")
+    local random = handle and handle:read(8) or nil
+    if handle then handle:close() end
+    local suffix = tostring(os.time()) .. "."
+    if random then
+        for index = 1, #random do
+            suffix = suffix .. string.format("%02x", random:byte(index))
+        end
+    else
+        suffix = suffix .. tostring(math.random(100000, 999999))
+    end
+    return suffix
+end
+
 local function find_executable(names)
     for _, name in ipairs(names) do
         if file_exists(name) then return name end
@@ -316,6 +332,83 @@ local function normalize_proxy_mode(value)
     return nil
 end
 
+local write_atomic
+
+local function valid_profile_name(value)
+    value = trim(value or "") or ""
+    value = value:match("([^/\\]+)$") or value
+    if #value < 6 or #value > 80 or value:find("..", 1, true) then return nil end
+    if not value:match("^[A-Za-z0-9][A-Za-z0-9._%-]*%.[Yy][Aa][Mm][Ll]$")
+        and not value:match("^[A-Za-z0-9][A-Za-z0-9._%-]*%.[Yy][Mm][Ll]$") then
+        return nil
+    end
+    return value
+end
+
+local function profile_content_valid(content)
+    if not content or #content == 0 then return false, "Configuration file is empty" end
+    if #content > MAX_PROFILE_SIZE then return false, "Configuration file exceeds 2 MiB" end
+    if content:find("%z") then return false, "Configuration file contains binary data" end
+    local normalized = "\n" .. content:gsub("\r\n", "\n")
+    if not normalized:match("\nproxies:%s*")
+        and not normalized:match("\nproxy%-providers:%s*")
+        and not normalized:match("\nproxy%-groups:%s*")
+        and not normalized:match("\nrules:%s*") then
+        return false, "No supported top-level Clash configuration section was found"
+    end
+    return true
+end
+
+local function active_profile_name(installation)
+    if not installation.detected then return nil end
+    local link = installation.root .. "/yamls/config.yaml"
+    local ok, target = pcall(fs.readlink, link)
+    if not ok or not target then return nil end
+    local name = target:match("([^/]+)$")
+    return valid_profile_name(name)
+end
+
+local function list_profiles(installation)
+    local profiles = {}
+    if not installation.detected then return profiles end
+    local directory = installation.root .. "/providers"
+    local iterator = fs.dir(directory)
+    if not iterator then return profiles end
+    local active = active_profile_name(installation)
+    for entry in iterator do
+        local name = valid_profile_name(entry)
+        if name then
+            local stat = fs.stat(directory .. "/" .. name)
+            if stat and stat.type == "reg" then
+                profiles[#profiles + 1] = {
+                    name = name,
+                    size = tonumber(stat.size) or 0,
+                    modified = tonumber(stat.mtime) or 0,
+                    active = name == active
+                }
+            end
+        end
+    end
+    table.sort(profiles, function(left, right)
+        if left.active ~= right.active then return left.active end
+        return left.name:lower() < right.name:lower()
+    end)
+    return profiles
+end
+
+local function save_profile(installation, name, content)
+    name = valid_profile_name(name)
+    if not name then return nil, "Use an ASCII .yaml or .yml file name (letters, numbers, dot, dash, underscore)" end
+    local valid, validation_error = profile_content_valid(content)
+    if not valid then return nil, validation_error end
+    local directory = installation.root .. "/providers"
+    if not directory_exists(directory) then return nil, "ShellClash providers directory not found" end
+    local target = directory .. "/" .. name
+    if fs.stat(target) then return nil, "A configuration with this name already exists" end
+    if not write_atomic(target, content) then return nil, "Unable to save configuration file" end
+    return true
+end
+
 local function collect_status()
     local grants = read_grants()
     if not grants["system.read"] or not grants["filesystem.read"] then
@@ -332,9 +425,12 @@ local function collect_status()
             runtime = { controllerReady = false },
             settings = {
                 trafficOptions = { "Mix", "Redir", "Tproxy", "Tun" },
-                dnsOptions = { "redir_host", "fake-ip" },
-                mixedPort = 7890
+                dnsOptions = { "redir_host", "fake-ip", "mix", "route" },
+                mixedPort = 7890,
+                ipv6Proxy = false,
+                quicProxy = true
             },
+            profiles = {},
             dashboard = { available = false }
         }
     end
@@ -389,23 +485,18 @@ local function collect_status()
             trafficMode = config.redir_mod,
             dnsMode = config.dns_mod,
             trafficOptions = { "Mix", "Redir", "Tproxy", "Tun" },
-            dnsOptions = { "redir_host", "fake-ip" },
-            mixedPort = tonumber(config.mix_port) or 7890
+            dnsOptions = { "redir_host", "fake-ip", "mix", "route" },
+            mixedPort = tonumber(config.mix_port) or 7890,
+            ipv6Proxy = config.ipv6_redir == "ON",
+            quicProxy = config.quic_rj ~= "ON"
         },
+        profiles = list_profiles(installation),
         dashboard = dashboard_details(installation)
     }
 end
 
-local function write_atomic(path, value)
-    local random_handle = io.open("/dev/urandom", "rb")
-    local random = random_handle and random_handle:read(6) or nil
-    if random_handle then random_handle:close() end
-    local suffix = tostring(os.time()) .. "."
-    if random then
-        for index = 1, #random do suffix = suffix .. string.format("%02x", random:byte(index)) end
-    else
-        suffix = suffix .. tostring(math.random(100000, 999999))
-    end
+write_atomic = function(path, value)
+    local suffix = random_suffix()
     local temporary = path .. ".nekocoffee.tmp." .. suffix
     local handle = io.open(temporary, "wb")
     if not handle then return false end
@@ -530,7 +621,7 @@ end
 local function acquire_lock()
     local existing = fs.stat(LOCK_DIR)
     if existing and existing.type == "dir" and existing.mtime
-        and os.time() - existing.mtime > 60 then
+        and os.time() - existing.mtime > 180 then
         pcall(fs.rmdir, LOCK_DIR)
     end
     return fs.mkdir(LOCK_DIR) == true
@@ -548,21 +639,31 @@ local function with_lock(callback)
     return result, message
 end
 
-local function change_settings(installation, traffic_mode, dns_mode)
+local function change_settings(installation, traffic_mode, dns_mode, ipv6_proxy, quic_proxy)
     if not installation.configPath then return nil, "ShellClash configuration not found" end
     if not traffic_modes[traffic_mode] then return nil, "Unsupported traffic mode" end
+    local current_dns = (installation.config or {}).dns_mod
+    local preserving_legacy_dns = legacy_dns_modes[dns_mode] and current_dns == dns_mode
+    if not dns_modes[dns_mode] and not preserving_legacy_dns then
+        return nil, "Unsupported DNS mode"
+    end
+    if ipv6_proxy ~= "1" and ipv6_proxy ~= "0" then return nil, "Invalid IPv6 setting" end
+    if quic_proxy ~= "1" and quic_proxy ~= "0" then return nil, "Invalid QUIC setting" end
 
     local original_config = read_file(installation.configPath)
     if not original_config then return nil, "Unable to read ShellClash configuration" end
-    local current_config = parse_shell_config(installation.configPath)
-    local preserved_legacy_dns = legacy_dns_modes[dns_mode] and current_config.dns_mod == dns_mode
-    if not dns_modes[dns_mode] and not preserved_legacy_dns then
-        return nil, "Unsupported DNS mode"
-    end
-    local updated_config = replace_shell_values(original_config, {
+    local replacements = {
         redir_mod = traffic_mode,
-        dns_mod = dns_mode
-    })
+        dns_mod = dns_mode,
+        ipv6_redir = ipv6_proxy == "1" and "ON" or "OFF",
+        quic_rj = quic_proxy == "1" and "OFF" or "ON"
+    }
+    if ipv6_proxy == "1" then replacements.ipv6_support = "ON" end
+    if dns_mode == "fake-ip" then
+        replacements.cn_ip_route = "OFF"
+        replacements.cn_ipv6_route = "OFF"
+    end
+    local updated_config = replace_shell_values(original_config, replacements)
 
     local original_yaml
     local updated_yaml
@@ -613,25 +714,205 @@ end
 local function check_ip(proxy_port)
     local curl = find_executable({ "/usr/bin/curl", "/bin/curl", "/usr/sbin/curl" })
     if not curl then return nil, "curl is unavailable" end
-    local base = shell_quote(curl)
-        .. " -4 -fsS --connect-timeout 3 --max-time 7 --max-filesize 128"
-    local url = shell_quote("https://api.ipify.org")
-    local direct_output = capture(base .. " --noproxy '*' " .. url, 128)
-    local direct_ip = valid_ipv4(direct_output)
-    local proxy_ip
-    if proxy_port and proxy_port >= 1 and proxy_port <= 65535 then
-        local proxy_output = capture(
-            base .. " --proxy " .. shell_quote("http://127.0.0.1:" .. tostring(proxy_port)) .. " " .. url,
-            128
-        )
-        proxy_ip = valid_ipv4(proxy_output)
+    local direct_endpoints = {
+        { url = "https://api.ip.sb/ip", source = "api.ip.sb" },
+        { url = "https://api.ipify.org", source = "api.ipify.org" },
+        { url = "https://v4.ident.me", source = "v4.ident.me" }
+    }
+    local proxy_endpoints = {
+        { url = "https://api.ipify.org", source = "api.ipify.org" },
+        { url = "https://v4.ident.me", source = "v4.ident.me" },
+        { url = "https://api.ip.sb/ip", source = "api.ip.sb" }
+    }
+    local function try_endpoints(endpoints, transport, max_time)
+        local base = shell_quote(curl)
+            .. " -4 -fsS --connect-timeout 3 --max-time " .. tostring(max_time)
+            .. " --max-filesize 128 -A " .. shell_quote("NekoCoffee/" .. VERSION)
+        for _, endpoint in ipairs(endpoints) do
+            local output, ok = capture(base .. " " .. transport .. " " .. shell_quote(endpoint.url), 128)
+            local ip = ok and valid_ipv4(output) or nil
+            if ip then return { ip = ip, source = endpoint.source } end
+        end
+        return { error = "All public IP services failed" }
     end
-    if not direct_ip and not proxy_ip then return nil, "Public IP check failed" end
+    local direct = try_endpoints(direct_endpoints, "--noproxy '*'", 6)
+    local proxy
+    if proxy_port and proxy_port >= 1 and proxy_port <= 65535 then
+        proxy = try_endpoints(
+            proxy_endpoints,
+            "--proxy " .. shell_quote("http://127.0.0.1:" .. tostring(proxy_port)),
+            10
+        )
+    else
+        proxy = { error = "Mixed proxy port is unavailable" }
+    end
     return {
-        direct = direct_ip,
-        proxy = proxy_ip,
+        direct = direct,
+        proxy = proxy,
         timestamp = os.time()
     }
+end
+
+local function public_ipv4(value)
+    local ip = valid_ipv4(value)
+    if not ip then return nil end
+    for part in ip:gmatch("[^.]+") do
+        if #part > 1 and part:sub(1, 1) == "0" then return nil end
+    end
+    local first, second = ip:match("^(%d+)%.(%d+)")
+    first, second = tonumber(first), tonumber(second)
+    if first == 0 or first == 10 or first == 127 or first >= 224
+        or (first == 100 and second >= 64 and second <= 127)
+        or (first == 169 and second == 254)
+        or (first == 172 and second >= 16 and second <= 31)
+        or (first == 192 and (second == 0 or second == 168))
+        or (first == 198 and (second == 18 or second == 19)) then
+        return nil
+    end
+    return ip
+end
+
+local function safe_https_target(value)
+    local url = trim(value or "") or ""
+    if #url < 12 or #url > 1024 or url:find("%s") or url:sub(1, 8):lower() ~= "https://" then
+        return nil
+    end
+    local authority = url:match("^https://([^/%?#]+)")
+    if not authority or authority:find("@", 1, true) or authority:sub(1, 1) == "[" then return nil end
+    local host, port = authority:match("^([^:]+):(%d+)$")
+    if not host then
+        if authority:find(":", 1, true) then return nil end
+        host, port = authority, "443"
+    end
+    host = host:lower()
+    port = tonumber(port)
+    if not port or port < 1 or port > 65535
+        or not host:match("^[a-z0-9%.%-]+$")
+        or host == "localhost" or host:match("%.localhost$")
+        or host:match("%.local$") or host:match("%.internal$")
+        or host:match("^%d+$") or host:match("^0[xX]") then
+        return nil
+    end
+
+    local address = public_ipv4(host)
+    if not address then
+        if valid_ipv4(host) then return nil end
+        local nslookup = find_executable({ "/usr/bin/nslookup", "/bin/nslookup" })
+        if not nslookup then return nil end
+        local output, ok = capture(shell_quote(nslookup) .. " " .. shell_quote(host), 16384)
+        if not ok then return nil end
+        local after_name = false
+        for line in output:gmatch("[^\r\n]+") do
+            if line:match("^%s*Name%s*:") then
+                after_name = true
+            elseif after_name then
+                local candidate = line:match("Address%s*%d*%s*:%s*([%d%.]+)")
+                address = public_ipv4(candidate)
+                if address then break end
+            end
+        end
+        if not address then return nil end
+    end
+    return { url = url, host = host, port = port, address = address }
+end
+
+local function import_profile(installation, name, url)
+    local target = safe_https_target(url)
+    if not target then return nil, "Use a resolvable public HTTPS configuration URL" end
+    name = valid_profile_name(name)
+    if not name then return nil, "Use an ASCII .yaml or .yml file name" end
+    local curl = find_executable({ "/usr/bin/curl", "/bin/curl", "/usr/sbin/curl" })
+    if not curl then return nil, "curl is unavailable" end
+    local temporary = "/tmp/mwef-nekocoffee-import." .. random_suffix() .. ".yaml"
+    local command = shell_quote(curl)
+        .. " -4 -fsS --noproxy '*' --connect-timeout 5 --max-time 30 --max-filesize " .. tostring(MAX_PROFILE_SIZE)
+        .. " --proto '=https' --proto-redir '=https'"
+        .. " --resolve " .. shell_quote(target.host .. ":" .. tostring(target.port) .. ":" .. target.address)
+        .. " -A " .. shell_quote("NekoCoffee/" .. VERSION)
+        .. " -o " .. shell_quote(temporary) .. " " .. shell_quote(target.url)
+    local result = os.execute(command .. " >/dev/null 2>&1")
+    if not command_succeeded(result) then
+        os.remove(temporary)
+        return nil, "Unable to download the configuration URL"
+    end
+    local content = read_file(temporary, MAX_PROFILE_SIZE + 1)
+    os.remove(temporary)
+    return save_profile(installation, name, content)
+end
+
+local function validate_profile_with_core(installation, profile_path)
+    local core = first_file({
+        "/tmp/ShellCrash/CrashCore",
+        "/tmp/ShellClash/CrashCore",
+        installation.root .. "/CrashCore",
+        installation.root .. "/CrashCore.raw"
+    })
+    local timeout = find_executable({ "/usr/bin/timeout", "/bin/timeout" })
+    local busybox = find_executable({ "/bin/busybox", "/usr/bin/busybox" })
+    if not core or (not timeout and not busybox) then return nil, "Configuration validator is unavailable" end
+    local prefix = timeout and shell_quote(timeout) or (shell_quote(busybox) .. " timeout")
+    local command = prefix .. " 20 " .. shell_quote(core)
+        .. " -t -d " .. shell_quote(installation.root)
+        .. " -f " .. shell_quote(profile_path)
+    local result = os.execute(command .. " >/dev/null 2>&1")
+    if not command_succeeded(result) then return nil, "Configuration failed the core validation check" end
+    return true
+end
+
+local function replace_config_symlink(installation, target)
+    local link = installation.root .. "/yamls/config.yaml"
+    local temporary = installation.root .. "/yamls/.nekocoffee.config." .. random_suffix()
+    local ln = find_executable({ "/bin/ln", "/usr/bin/ln" })
+    if not ln then return nil, "ln is unavailable" end
+    local result = os.execute(
+        shell_quote(ln) .. " -s " .. shell_quote(target)
+            .. " " .. shell_quote(temporary) .. " >/dev/null 2>&1"
+    )
+    if not command_succeeded(result) then
+        os.remove(temporary)
+        return nil, "Unable to prepare configuration switch"
+    end
+    if not os.rename(temporary, link) then
+        os.remove(temporary)
+        return nil, "Unable to activate configuration"
+    end
+    return true
+end
+
+local function switch_profile(installation, name)
+    name = valid_profile_name(name)
+    if not name then return nil, "Invalid configuration name" end
+    local profile_path = installation.root .. "/providers/" .. name
+    local lstat_ok, lstat = pcall(fs.lstat, profile_path)
+    if not lstat_ok or not lstat or lstat.type ~= "reg" then
+        return nil, "Configuration file not found or is not a regular file"
+    end
+    local content = read_file(profile_path, MAX_PROFILE_SIZE + 1)
+    local valid, validation_error = profile_content_valid(content)
+    if not valid then return nil, validation_error end
+    local core_valid, core_error = validate_profile_with_core(installation, profile_path)
+    if not core_valid then return nil, core_error end
+    if active_profile_name(installation) == name then return true end
+
+    local link = installation.root .. "/yamls/config.yaml"
+    local readlink_ok, previous_target = pcall(fs.readlink, link)
+    if not readlink_ok or not previous_target then
+        return nil, "Active configuration is not a symbolic link; refusing to overwrite it"
+    end
+    local linked, link_error = replace_config_symlink(installation, "../providers/" .. name)
+    if not linked then return nil, link_error end
+    if installation.running then
+        local restarted, restart_error = run_service(installation, "restart")
+        if not restarted then
+            local restored = replace_config_symlink(installation, previous_target)
+            if restored then
+                run_service(installation, "restart")
+                return nil, "Restart failed; the previous configuration was restored: " .. restart_error
+            end
+            return nil, "Restart failed and the previous configuration could not be restored: " .. restart_error
+        end
+    end
+    return true
 end
 
 local function valid_session()
@@ -718,8 +999,98 @@ local function handle_settings()
     if not allowed then return respond({ code = 403, message = grant_error }, 403) end
     local traffic_mode = http.formvalue("trafficMode") or ""
     local dns_mode = http.formvalue("dnsMode") or ""
+    local ipv6_proxy = http.formvalue("ipv6Proxy") or ""
+    local quic_proxy = http.formvalue("quicProxy") or ""
     local result, message = with_lock(function()
-        return change_settings(detect_installation(), traffic_mode, dns_mode)
+        return change_settings(detect_installation(), traffic_mode, dns_mode, ipv6_proxy, quic_proxy)
+    end)
+    if not result then return respond({ code = 500, message = message }, 500) end
+    respond(collect_status())
+end
+
+local function handle_profile_upload()
+    if not require_post() then return end
+    local allowed, grant_error = require_grants({
+        "system.read", "filesystem.read", "filesystem.write"
+    })
+    if not allowed then return respond({ code = 403, message = grant_error }, 403) end
+
+    local upload = { size = 0 }
+    http.setfilehandler(function(meta, chunk, eof)
+        if not meta or meta.name ~= "configFile" then return end
+        if not upload.path then
+            upload.originalName = meta.file
+            upload.path = "/tmp/mwef-nekocoffee-upload." .. random_suffix() .. ".yaml"
+            upload.handle = io.open(upload.path, "wb")
+            if not upload.handle then upload.error = "Unable to create upload staging file" end
+        end
+        if chunk and #chunk > 0 then
+            upload.size = upload.size + #chunk
+            if upload.size > MAX_PROFILE_SIZE then
+                upload.error = "Configuration file exceeds 2 MiB"
+            elseif upload.handle and not upload.error then
+                local ok, result = pcall(upload.handle.write, upload.handle, chunk)
+                if not ok or not result then upload.error = "Unable to write upload staging file" end
+            end
+        end
+        if eof and upload.handle then
+            local flush_ok, flush_result = pcall(upload.handle.flush, upload.handle)
+            local close_ok, close_result = pcall(upload.handle.close, upload.handle)
+            upload.handle = nil
+            if not flush_ok or not flush_result or not close_ok or not close_result then
+                upload.error = "Unable to finish upload staging file"
+            end
+        end
+    end)
+
+    local requested_name = http.formvalue("profileName")
+    http.formvalue("configFile")
+    if upload.handle then pcall(upload.handle.close, upload.handle) end
+    if upload.error or not upload.path then
+        if upload.path then os.remove(upload.path) end
+        return respond({ code = 400, message = upload.error or "No configuration file uploaded" }, 400)
+    end
+    local content = read_file(upload.path, MAX_PROFILE_SIZE + 1)
+    os.remove(upload.path)
+    local name = trim(requested_name or "")
+    if not name or name == "" then name = upload.originalName end
+    local result, message = with_lock(function()
+        local installation = detect_installation()
+        if not installation.detected then return nil, "ShellClash installation not found" end
+        return save_profile(installation, name, content)
+    end)
+    if not result then return respond({ code = 400, message = message }, 400) end
+    respond(collect_status())
+end
+
+local function handle_profile_import()
+    if not require_post() then return end
+    local allowed, grant_error = require_grants({
+        "system.read", "filesystem.read", "filesystem.write", "network.client", "shell.execute"
+    })
+    if not allowed then return respond({ code = 403, message = grant_error }, 403) end
+    local name = http.formvalue("profileName") or ""
+    local url = http.formvalue("url") or ""
+    local result, message = with_lock(function()
+        local installation = detect_installation()
+        if not installation.detected then return nil, "ShellClash installation not found" end
+        return import_profile(installation, name, url)
+    end)
+    if not result then return respond({ code = 400, message = message }, 400) end
+    respond(collect_status())
+end
+
+local function handle_profile_switch()
+    if not require_post() then return end
+    local allowed, grant_error = require_grants({
+        "system.read", "filesystem.read", "filesystem.write", "network.client", "service.control", "shell.execute"
+    })
+    if not allowed then return respond({ code = 403, message = grant_error }, 403) end
+    local name = http.formvalue("profileName") or ""
+    local result, message = with_lock(function()
+        local installation = detect_installation()
+        if not installation.detected then return nil, "ShellClash installation not found" end
+        return switch_profile(installation, name)
     end)
     if not result then return respond({ code = 500, message = message }, 500) end
     respond(collect_status())
@@ -758,5 +1129,8 @@ function dispatch()
     if action == "proxy-mode" then return handle_proxy_mode() end
     if action == "settings" then return handle_settings() end
     if action == "ip-check" then return handle_ip_check() end
+    if action == "profile-upload" then return handle_profile_upload() end
+    if action == "profile-import" then return handle_profile_import() end
+    if action == "profile-switch" then return handle_profile_switch() end
     respond({ code = 404, message = "Unknown action" }, 400)
 end

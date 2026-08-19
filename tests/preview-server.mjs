@@ -28,9 +28,15 @@ const model = {
         trafficMode: 'Mix',
         dnsMode: 'redir_host',
         trafficOptions: ['Mix', 'Redir', 'Tproxy', 'Tun'],
-        dnsOptions: ['redir_host', 'fake-ip'],
-        mixedPort: 7890
+        dnsOptions: ['redir_host', 'fake-ip', 'mix', 'route'],
+        mixedPort: 7890,
+        ipv6Proxy: true,
+        quicProxy: true
     },
+    profiles: [
+        { name: 'RMUX.yaml', size: 184322, modified: Math.floor(Date.now() / 1000) - 4200, active: true },
+        { name: 'travel.yaml', size: 96314, modified: Math.floor(Date.now() / 1000) - 86400, active: false }
+    ],
     dashboard: { available: true, port: 9999, path: '/ui/', secretSet: false }
 };
 
@@ -71,9 +77,23 @@ const server = http.createServer(async (req, res) => {
         } else if (action === 'settings') {
             model.settings.trafficMode = form.get('trafficMode');
             model.settings.dnsMode = form.get('dnsMode');
+            model.settings.ipv6Proxy = form.get('ipv6Proxy') === '1';
+            model.settings.quicProxy = form.get('quicProxy') === '1';
             model.runtime.dnsEnhancedMode = model.settings.dnsMode === 'fake-ip' ? 'fake-ip' : 'redir-host';
         } else if (action === 'ip-check') {
-            return json(res, { code: 0, ip: { direct: '198.51.100.23', proxy: '203.0.113.8', timestamp: Math.floor(Date.now() / 1000) } });
+            return json(res, { code: 0, ip: {
+                direct: { ip: '198.51.100.23', source: 'api.ip.sb' },
+                proxy: { ip: '203.0.113.8', source: 'api.ipify.org' },
+                timestamp: Math.floor(Date.now() / 1000)
+            } });
+        } else if (action === 'profile-upload' || action === 'profile-import') {
+            const importedName = action === 'profile-import' ? form.get('profileName') : 'uploaded.yaml';
+            if (!model.profiles.some((profile) => profile.name === importedName)) {
+                model.profiles.push({ name: importedName, size: 42861, modified: Math.floor(Date.now() / 1000), active: false });
+            }
+        } else if (action === 'profile-switch') {
+            const requested = form.get('profileName');
+            model.profiles.forEach((profile) => { profile.active = profile.name === requested; });
         }
         model.timestamp = Math.floor(Date.now() / 1000);
         return json(res, model);
