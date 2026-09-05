@@ -200,6 +200,7 @@
     border-radius: 13px;
     background: #dfe3e7;
     transition: .18s ease;
+    pointer-events: none;
 }
 
 .nekocoffee-toggle-track i {
@@ -263,6 +264,94 @@
 }
 
 .nekocoffee-import-line .mwef-input { flex: 1; }
+
+.nekocoffee-collapsible-head {
+    margin-bottom: 0;
+}
+
+.nekocoffee-device-panel {
+    padding-top: 22px;
+}
+
+.nekocoffee-device-panel[hidden] {
+    display: none;
+}
+
+.nekocoffee-device-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin: 6px 0 12px;
+    gap: 10px;
+}
+
+.nekocoffee-device-toolbar .mwef-input {
+    box-sizing: border-box;
+    width: 230px;
+    text-transform: uppercase;
+}
+
+.nekocoffee-device-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--nekocoffee-line);
+    border-top: 2px solid var(--nekocoffee-blue);
+}
+
+.nekocoffee-device-table {
+    width: 100%;
+    border-collapse: collapse;
+    color: #59636f;
+    font-size: 12px;
+}
+
+.nekocoffee-device-table th,
+.nekocoffee-device-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid #eceff2;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.nekocoffee-device-table th {
+    color: #7c858f;
+    background: #fafbfc;
+    font-weight: 400;
+}
+
+.nekocoffee-device-table tbody tr:last-child td { border-bottom: 0; }
+.nekocoffee-device-table code { color: #46515e; font-family: Consolas, Monaco, monospace; }
+.nekocoffee-device-table td:nth-last-child(2),
+.nekocoffee-device-table td:last-child { width: 82px; text-align: center; }
+.nekocoffee-device-table .nekocoffee-empty { padding: 26px; color: #999; text-align: center; }
+
+.nekocoffee-device-state {
+    color: #929ba7;
+}
+
+.nekocoffee-device-state.is-online {
+    color: var(--nekocoffee-green);
+}
+
+.nekocoffee-device-switch {
+    width: 40px;
+    height: 22px;
+    margin: 0;
+    vertical-align: middle;
+}
+
+.nekocoffee-device-switch .nekocoffee-toggle-track i {
+    width: 16px;
+    height: 16px;
+}
+
+.nekocoffee-device-switch input:checked + .nekocoffee-toggle-track i { left: 20px; }
+
+.nekocoffee-device-tip {
+    margin-top: 10px;
+}
+
+.nekocoffee-device-panel .mwef-form-actions {
+    margin-bottom: 0;
+}
 
 .nekocoffee-profile-wrap {
     overflow-x: auto;
@@ -382,4 +471,7 @@
     .nekocoffee-meta span { display: flex; margin: 5px 0; }
     .nekocoffee-wide-input,
     .nekocoffee-import-line { box-sizing: border-box; width: 100%; }
+    .nekocoffee-device-toolbar { flex-wrap: wrap; justify-content: flex-start; }
+    .nekocoffee-device-toolbar .mwef-input { width: 100%; }
 }
+
