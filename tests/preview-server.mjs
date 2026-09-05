@@ -33,6 +33,16 @@ const model = {
         ipv6Proxy: true,
         quicProxy: true
     },
+    devicePolicy: {
+        mode: 'blacklist',
+        ipFilterCount: 1,
+        firewallArea: '3',
+        devices: [
+            { name: 'Living-Room-TV', ip: '192.168.31.86', mac: 'A4:C1:38:12:34:56', online: true, configured: false, configuredOnly: false, proxy: true, source: 'dhcp' },
+            { name: 'Phone', ip: '192.168.31.128', mac: '7A:91:4F:AB:CD:20', online: true, configured: true, configuredOnly: false, proxy: false, source: 'dhcp' },
+            { name: '', ip: '', mac: '32:14:7B:AA:09:F1', online: false, configured: true, configuredOnly: true, proxy: false, source: 'configured' }
+        ]
+    },
     profiles: [
         { name: 'RMUX.yaml', size: 184322, modified: Math.floor(Date.now() / 1000) - 4200, active: true },
         { name: 'travel.yaml', size: 96314, modified: Math.floor(Date.now() / 1000) - 86400, active: false }
@@ -80,6 +90,22 @@ const server = http.createServer(async (req, res) => {
             model.settings.ipv6Proxy = form.get('ipv6Proxy') === '1';
             model.settings.quicProxy = form.get('quicProxy') === '1';
             model.runtime.dnsEnhancedMode = model.settings.dnsMode === 'fake-ip' ? 'fake-ip' : 'redir-host';
+        } else if (action === 'device-policy') {
+            const mode = form.get('mode') === 'whitelist' ? 'whitelist' : 'blacklist';
+            const configured = new Set((form.get('macs') || '').split(',').filter(Boolean));
+            model.devicePolicy.mode = mode;
+            model.devicePolicy.devices.forEach((device) => {
+                device.configured = configured.has(device.mac);
+                device.proxy = mode === 'whitelist' ? device.configured : !device.configured;
+            });
+            configured.forEach((mac) => {
+                if (!model.devicePolicy.devices.some((device) => device.mac === mac)) {
+                    model.devicePolicy.devices.push({
+                        name: '', ip: '', mac, online: false, configured: true,
+                        configuredOnly: true, proxy: mode === 'whitelist', source: 'configured'
+                    });
+                }
+            });
         } else if (action === 'ip-check') {
             return json(res, { code: 0, ip: {
                 direct: { ip: '198.51.100.23', source: 'api.ip.sb' },
@@ -111,3 +137,4 @@ const server = http.createServer(async (req, res) => {
 server.listen(port, '127.0.0.1', () => {
     process.stdout.write(`NekoCoffee preview: http://127.0.0.1:${port}/\n`);
 });
+
