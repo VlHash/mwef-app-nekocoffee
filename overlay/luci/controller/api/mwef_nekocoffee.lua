@@ -5,7 +5,7 @@ local http = require "luci.http"
 local json = require "luci.json"
 
 local PLUGIN_ID = "mwef-app-nekocoffee"
-local VERSION = "1.1.0"
+local VERSION = "1.2.0"
 local MWEF_BASE = "/data/other_vol/xqext"
 local DEFAULT_PLUGIN_DIR = MWEF_BASE .. "/plugins"
 local LOCK_DIR = "/tmp/mwef-nekocoffee.lock"
@@ -345,6 +345,144 @@ local function valid_profile_name(value)
     return value
 end
 
+local function valid_ipv4(value)
+    value = trim(value or "") or ""
+    if #value < 7 or #value > 15 then return nil end
+    local parts = {}
+    for part in value:gmatch("[^.]+") do parts[#parts + 1] = part end
+    if #parts ~= 4 then return nil end
+    for _, part in ipairs(parts) do
+        if not part:match("^%d+$") or tonumber(part) > 255 then return nil end
+    end
+    return value
+end
+
+local function private_ipv4(value)
+    local ip = valid_ipv4(value)
+    if not ip then return nil end
+    local first, second = ip:match("^(%d+)%.(%d+)")
+    first, second = tonumber(first), tonumber(second)
+    if first == 10 or (first == 172 and second >= 16 and second <= 31)
+        or (first == 192 and second == 168) then
+        return ip
+    end
+    return nil
+end
+
+local function valid_mac(value)
+    value = trim(value or "") or ""
+    if not value:match("^%x%x:%x%x:%x%x:%x%x:%x%x:%x%x$") then return nil end
+    value = value:upper()
+    local first = tonumber(value:sub(1, 2), 16)
+    if not first or first % 2 == 1 or value == "00:00:00:00:00:00" then return nil end
+    return value
+end
+
+local function read_nonempty_lines(path)
+    local values = {}
+    local content = read_file(path) or ""
+    for line in content:gmatch("[^\r\n]+") do
+        line = trim(line)
+        if line and line ~= "" then values[#values + 1] = line end
+    end
+    return values
+end
+
+local function collect_device_policy(installation)
+    local config = installation.config or {}
+    local mode = config.macfilter_type == "白名单" and "whitelist" or "blacklist"
+    local devices = {}
+    local by_mac = {}
+    local filter_path = installation.detected and (installation.root .. "/configs/mac") or nil
+    local ip_filter_path = installation.detected and (installation.root .. "/configs/ip_filter") or nil
+    local configured_macs = {}
+
+    local function add_device(ip, mac, name, online, source)
+        mac = valid_mac(mac)
+        if not mac then return end
+        ip = private_ipv4(ip)
+        name = trim(name or "") or ""
+        if name == "*" then name = "" end
+        name = name:gsub("[%c]", "")
+        local device = by_mac[mac]
+        if not device then
+            device = { mac = mac, online = false }
+            by_mac[mac] = device
+            devices[#devices + 1] = device
+        end
+        if ip then device.ip = ip end
+        if name ~= "" then device.name = name end
+        if online then device.online = true end
+        if source then device.source = source end
+    end
+
+    if filter_path then
+        for _, value in ipairs(read_nonempty_lines(filter_path)) do
+            local mac = valid_mac(value)
+            if mac and not configured_macs[mac] then
+                configured_macs[mac] = true
+                add_device(nil, mac, nil, false, "configured")
+            end
+        end
+    end
+
+    local lease_paths = {
+        "/var/lib/dhcp/dhcpd.leases",
+        "/var/lib/dhcpd/dhcpd.leases",
+        "/tmp/dhcp.leases",
+        "/tmp/dnsmasq.leases"
+    }
+    for _, path in ipairs(lease_paths) do
+        if file_exists(path) then
+            local content = read_file(path, 512 * 1024) or ""
+            for line in content:gmatch("[^\r\n]+") do
+                local _, mac, ip, name = line:match("^%s*(%d+)%s+(%S+)%s+(%S+)%s+(%S+)")
+                if mac and ip then add_device(ip, mac, name, true, "dhcp") end
+            end
+        end
+    end
+
+    local arp = read_file("/proc/net/arp", 256 * 1024) or ""
+    for line in arp:gmatch("[^\r\n]+") do
+        local ip, _, flags, mac, _, interface = line:match(
+            "^%s*(%S+)%s+(%S+)%s+(%S+)%s+(%S+)%s+(%S+)%s+(%S+)"
+        )
+        local lan_interface = interface and (
+            interface == "br0" or interface == "br-lan"
+                or interface:match("^br[%w%._%-]+$") or interface:match("^lan[%w%._%-]*$")
+        )
+        if flags and flags ~= "0x0" and lan_interface then
+            add_device(ip, mac, nil, true, "arp")
+        end
+    end
+
+    for _, device in ipairs(devices) do
+        device.configured = configured_macs[device.mac] == true
+        if mode == "whitelist" then
+            device.proxy = device.configured
+        else
+            device.proxy = not device.configured
+        end
+        device.configuredOnly = device.configured and not device.online and not device.ip
+    end
+    table.sort(devices, function(left, right)
+        if left.online ~= right.online then return left.online end
+        local left_name = (left.name or ""):lower()
+        local right_name = (right.name or ""):lower()
+        if left_name ~= right_name then return left_name < right_name end
+        if (left.ip or "") ~= (right.ip or "") then return (left.ip or "") < (right.ip or "") end
+        return left.mac < right.mac
+    end)
+
+    return {
+        mode = mode,
+        devices = devices,
+        configuredMacCount = filter_path and #read_nonempty_lines(filter_path) or 0,
+        ipFilterCount = ip_filter_path and #read_nonempty_lines(ip_filter_path) or 0,
+        firewallArea = config.firewall_area
+    }
+end
+
 local function profile_content_valid(content)
     if not content or #content == 0 then return false, "Configuration file is empty" end
     if #content > MAX_PROFILE_SIZE then return false, "Configuration file exceeds 2 MiB" end
@@ -431,6 +569,7 @@ local function collect_status()
                 quicProxy = true
             },
             profiles = {},
+            devicePolicy = { mode = "blacklist", devices = {}, ipFilterCount = 0 },
             dashboard = { available = false }
         }
     end
@@ -491,6 +630,7 @@ local function collect_status()
             quicProxy = config.quic_rj ~= "ON"
         },
         profiles = list_profiles(installation),
+        devicePolicy = collect_device_policy(installation),
         dashboard = dashboard_details(installation)
     }
 end
@@ -699,16 +839,92 @@ local function change_settings(installation, traffic_mode, dns_mode, ipv6_proxy,
     return true
 end
 
-local function valid_ipv4(value)
-    value = trim(value or "") or ""
-    if #value < 7 or #value > 15 then return nil end
-    local parts = {}
-    for part in value:gmatch("[^.]+") do parts[#parts + 1] = part end
-    if #parts ~= 4 then return nil end
-    for _, part in ipairs(parts) do
-        if not part:match("^%d+$") or tonumber(part) > 255 then return nil end
+local function parse_mac_list(value)
+    value = tostring(value or "")
+    if #value > 4608 then return nil, "Device list is too large" end
+    local values = {}
+    local seen = {}
+    for item in value:gmatch("[^,%s]+") do
+        local mac = valid_mac(item)
+        if not mac then return nil, "Invalid device MAC address" end
+        if not seen[mac] then
+            seen[mac] = true
+            values[#values + 1] = mac
+            if #values > 128 then return nil, "At most 128 devices can be configured" end
+        end
     end
-    return value
+    table.sort(values)
+    return values
+end
+
+local function change_device_policy(installation, mode, mac_list)
+    if not installation.detected or not installation.root then
+        return nil, "ShellClash installation not found"
+    end
+    if not installation.configPath then return nil, "ShellClash configuration not found" end
+    if mode ~= "blacklist" and mode ~= "whitelist" then
+        return nil, "Unsupported device policy"
+    end
+    local macs, parse_error = parse_mac_list(mac_list)
+    if not macs then return nil, parse_error end
+    if mode == "whitelist" and #macs == 0 then
+        return nil, "Select at least one proxy device when new devices default to direct"
+    end
+
+    local configs_directory = installation.root .. "/configs"
+    if not directory_exists(configs_directory) then return nil, "ShellClash configs directory not found" end
+    local mac_path = configs_directory .. "/mac"
+    local mac_stat = fs.stat(mac_path)
+    local original_mac = read_file(mac_path)
+    if mac_stat and not original_mac then return nil, "Unable to read device list" end
+    original_mac = original_mac or ""
+    local original_config = read_file(installation.configPath)
+    if not original_config then return nil, "Unable to read ShellClash configuration" end
+
+    local updated_mac = #macs > 0 and (table.concat(macs, "\n") .. "\n") or ""
+    local filter_type = mode == "whitelist" and "白名单" or "黑名单"
+    local updated_config = replace_shell_values(original_config, { macfilter_type = filter_type })
+    local mac_changed = original_mac ~= updated_mac
+    local config_changed = original_config ~= updated_config
+    if not mac_changed and not config_changed then return true end
+
+    local config_ok
+    config_ok, config_changed = write_with_backup(
+        installation.configPath,
+        original_config,
+        updated_config
+    )
+    if not config_ok then return nil, "Unable to save device policy" end
+
+    local mac_ok
+    mac_ok, mac_changed = write_with_backup(mac_path, original_mac, updated_mac)
+    if not mac_ok then
+        if config_changed and not write_atomic(installation.configPath, original_config) then
+            return nil, "Unable to save device list or restore the previous configuration"
+        end
+        return nil, "Unable to save device list"
+    end
+
+    if installation.running then
+        local restarted, restart_error = run_service(installation, "restart")
+        if not restarted then
+            local restored = true
+            if mac_changed and not write_atomic(mac_path, original_mac) then restored = false end
+            if config_changed and not write_atomic(installation.configPath, original_config) then
+                restored = false
+            end
+            if not restored then
+                return nil, "Restart failed and the previous device policy could not be restored: "
+                    .. restart_error
+            end
+            local recovered = run_service(detect_installation(), "restart")
+            if recovered then
+                return nil, "Restart failed; the previous device policy was restored: " .. restart_error
+            end
+            return nil, "Restart failed and recovery could not be confirmed: " .. restart_error
+        end
+    end
+    return true
 end
 
 local function check_ip(proxy_port)
@@ -1008,6 +1224,21 @@ local function handle_settings()
     respond(collect_status())
 end
 
+local function handle_device_policy()
+    if not require_post() then return end
+    local allowed, grant_error = require_grants({
+        "system.read", "filesystem.read", "filesystem.write", "service.control", "shell.execute"
+    })
+    if not allowed then return respond({ code = 403, message = grant_error }, 403) end
+    local mode = http.formvalue("mode") or ""
+    local macs = http.formvalue("macs") or ""
+    local result, message = with_lock(function()
+        return change_device_policy(detect_installation(), mode, macs)
+    end)
+    if not result then return respond({ code = 400, message = message }, 400) end
+    respond(collect_status())
+end
+
 local function handle_profile_upload()
     if not require_post() then return end
     local allowed, grant_error = require_grants({
@@ -1128,9 +1359,11 @@ function dispatch()
     if action == "control" then return handle_control() end
     if action == "proxy-mode" then return handle_proxy_mode() end
     if action == "settings" then return handle_settings() end
+    if action == "device-policy" then return handle_device_policy() end
     if action == "ip-check" then return handle_ip_check() end
     if action == "profile-upload" then return handle_profile_upload() end
     if action == "profile-import" then return handle_profile_import() end
     if action == "profile-switch" then return handle_profile_switch() end
     respond({ code = 404, message = "Unknown action" }, 400)
 end
+
