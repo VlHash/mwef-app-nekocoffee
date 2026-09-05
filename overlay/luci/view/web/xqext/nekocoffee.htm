@@ -13,7 +13,7 @@ local pageTitle = language == "en" and "NekoCoffee - Extension Settings" or "Nek
 <link href="<%=resource%>/web/css/bc.css?v=<%=ver%>" rel="stylesheet">
 <link href="<%=resource%>/web/css/layout.css?v=<%=ver%>" rel="stylesheet">
 <link href="/xqext/core.css?v=0.2.3" rel="stylesheet">
-<link href="/xqext/plugins/mwef-app-nekocoffee/nekocoffee.css?v=1.1.0" rel="stylesheet">
+<link href="/xqext/plugins/mwef-app-nekocoffee/nekocoffee.css?v=1.2.0" rel="stylesheet">
 </head>
 <body>
 <div id="doc">
@@ -145,6 +145,58 @@ local pageTitle = language == "en" and "NekoCoffee - Extension Settings" or "Nek
             </div>
         </section>
 
+        <section id="nekocoffee-device-policy" class="mwef-section" aria-labelledby="nekocoffee-device-title">
+            <div class="nekocoffee-section-head nekocoffee-section-head-compact nekocoffee-collapsible-head">
+                <div>
+                    <h3 id="nekocoffee-device-title" class="mwef-section-title" data-i18n="devicePolicy">局域网设备代理</h3>
+                    <p id="nekocoffee-device-summary" data-i18n="devicePolicySummary">按设备选择是否经过代理；设置默认收起。</p>
+                </div>
+                <button id="nekocoffee-device-toggle" class="mwef-btn mwef-btn-small" type="button" aria-expanded="false" aria-controls="nekocoffee-device-panel" data-i18n="expand">展开</button>
+            </div>
+
+            <div id="nekocoffee-device-panel" class="nekocoffee-device-panel" hidden>
+                <div class="mwef-form-row form-item-select">
+                    <label class="k" for="nekocoffee-device-mode" data-i18n="newDeviceDefault">未列出设备默认</label>
+                    <div class="mwef-control">
+                        <span class="v mwef-native-select is-disabled">
+                            <select id="nekocoffee-device-mode" name="deviceMode" class="beautify" style="width: 498px;" disabled>
+                                <option value="blacklist" data-i18n="defaultProxy">走代理（推荐）</option>
+                                <option value="whitelist" data-i18n="defaultDirect">直连</option>
+                            </select>
+                        </span>
+                        <p class="mwef-tip" data-i18n="deviceModeTip">新接入且未列出的设备按此策略处理；每台设备仍可单独切换。</p>
+                    </div>
+                </div>
+
+                <div class="nekocoffee-device-toolbar">
+                    <input id="nekocoffee-manual-mac" class="mwef-input" type="text" maxlength="17" placeholder="AA:BB:CC:DD:EE:FF" aria-label="Device MAC" disabled>
+                    <button id="nekocoffee-add-device" class="mwef-btn" type="button" data-i18n="addDevice" disabled>添加 MAC</button>
+                    <button id="nekocoffee-refresh-devices" class="mwef-btn" type="button" data-i18n="refreshDevices" disabled>刷新设备</button>
+                </div>
+
+                <div class="nekocoffee-device-wrap">
+                    <table class="nekocoffee-device-table">
+                        <thead><tr>
+                            <th data-i18n="deviceName">设备名称</th>
+                            <th data-i18n="deviceIp">IP 地址</th>
+                            <th data-i18n="deviceMac">MAC 地址</th>
+                            <th data-i18n="deviceOnline">状态</th>
+                            <th data-i18n="useProxy">走代理</th>
+                            <th data-i18n="profileAction">操作</th>
+                        </tr></thead>
+                        <tbody id="nekocoffee-device-list">
+                            <tr><td colspan="6" class="nekocoffee-empty" data-i18n="loadingDevices">正在读取局域网设备…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p id="nekocoffee-device-ip-warning" class="nekocoffee-warning" hidden></p>
+                <p class="mwef-tip nekocoffee-device-tip" data-i18n="devicePolicyTip">优先使用 MAC 识别设备；保存后会重启服务并短暂中断代理连接。</p>
+                <div class="mwef-form-actions">
+                    <button id="nekocoffee-save-devices" class="mwef-btn mwef-btn-primary" type="button" data-i18n="saveDevicePolicy" disabled>保存设备策略</button>
+                </div>
+            </div>
+        </section>
+
         <section class="mwef-section" aria-labelledby="nekocoffee-profiles-title">
             <h3 id="nekocoffee-profiles-title" class="mwef-section-title" data-i18n="configProfiles">配置文件</h3>
 
@@ -222,10 +274,11 @@ local pageTitle = language == "en" and "NekoCoffee - Extension Settings" or "Nek
 <script>
 window.NEKOCOFFEE_CONFIG = {
     apiUrl: <%=json.encode(apiUrl)%>,
-    i18nUrl: <%=json.encode("/xqext/plugins/mwef-app-nekocoffee/i18n/" .. language .. ".json?v=1.1.0")%>,
+    i18nUrl: <%=json.encode("/xqext/plugins/mwef-app-nekocoffee/i18n/" .. language .. ".json?v=1.2.0")%>,
     interval: 5000
 };
 </script>
-<script src="/xqext/plugins/mwef-app-nekocoffee/nekocoffee.js?v=1.1.0"></script>
+<script src="/xqext/plugins/mwef-app-nekocoffee/nekocoffee.js?v=1.2.0"></script>
 </body>
 </html>
+
