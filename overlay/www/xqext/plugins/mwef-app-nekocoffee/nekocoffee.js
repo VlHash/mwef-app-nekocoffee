@@ -12,7 +12,10 @@
         dirtyTraffic: false,
         dirtyDns: false,
         dirtyIpv6: false,
-        dirtyQuic: false
+        dirtyQuic: false,
+        dirtyDevices: false,
+        deviceDraft: null,
+        devicePanelOpen: false
     };
 
     function byId(id) { return document.getElementById(id); }
@@ -48,7 +51,7 @@
         return new Promise(function (resolve, reject) {
             var xhr = new XMLHttpRequest();
             xhr.open(method || 'GET', config.apiUrl + '?action=' + encodeURIComponent(action), true);
-            xhr.timeout = action === 'profile-switch' ? 60000
+            xhr.timeout = action === 'profile-switch' || action === 'device-policy' ? 60000
                 : action === 'ip-check' ? 55000
                 : action === 'profile-import' || action === 'profile-upload' ? 40000 : 25000;
             xhr.setRequestHeader('Accept', 'application/json');
@@ -101,11 +104,11 @@
         return true;
     }
 
-    function syncBeautifiedSelect(select) {
+    function syncBeautifiedSelect(select, container) {
         if (!select) return;
         var jq = window.jQuery || window.$;
         if (jq && typeof jq.selectBeautify === 'function' && !jq(select).siblings('.textContent').length) {
-            jq.selectBeautify({ container: '#nekocoffee-mode-settings' });
+            jq.selectBeautify({ container: container || '#nekocoffee-mode-settings' });
         }
         var dummy = select.parentNode && select.parentNode.querySelector('.textContent .dummy');
         var option = select.options[select.selectedIndex];
@@ -162,6 +165,146 @@
     function formatDate(timestamp) {
         if (!timestamp) return '--';
         try { return new Date(timestamp * 1000).toLocaleString(); } catch (error) { return '--'; }
+    }
+
+    function formatMessage(key, fallback, values) {
+        var message = tr(key, fallback);
+        Object.keys(values || {}).forEach(function (name) {
+            message = message.replace(new RegExp('\\{' + name + '\\}', 'g'), String(values[name]));
+        });
+        return message;
+    }
+
+    function cloneDevicePolicy(policy) {
+        policy = policy || {};
+        var devices = [];
+        (policy.devices || []).forEach(function (device) {
+            devices.push({
+                mac: device.mac,
+                ip: device.ip || '',
+                name: device.name || '',
+                online: device.online === true,
+                proxy: device.proxy === true,
+                configuredOnly: device.configuredOnly === true,
+                source: device.source || ''
+            });
+        });
+        return {
+            mode: policy.mode === 'whitelist' ? 'whitelist' : 'blacklist',
+            devices: devices,
+            ipFilterCount: Number(policy.ipFilterCount) || 0,
+            firewallArea: policy.firewallArea
+        };
+    }
+
+    function normalizeMac(value) {
+        value = String(value || '').replace(/^\s+|\s+$/g, '').toUpperCase();
+        if (!/^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/.test(value)
+            || value === '00:00:00:00:00:00'
+            || parseInt(value.slice(0, 2), 16) % 2 === 1) return null;
+        return value;
+    }
+
+    function renderDevices(policy, installation) {
+        if (!state.dirtyDevices || !state.deviceDraft) state.deviceDraft = cloneDevicePolicy(policy);
+        var draft = state.deviceDraft || cloneDevicePolicy(policy);
+        var body = byId('nekocoffee-device-list');
+        var modeSelect = byId('nekocoffee-device-mode');
+        var installed = installation && installation.detected === true;
+        var canEdit = installed && hasGrants([
+            'system.read', 'filesystem.read', 'filesystem.write', 'service.control', 'shell.execute'
+        ]);
+
+        modeSelect.value = draft.mode;
+        setSelectDisabled(modeSelect, !canEdit || state.busy);
+        if (state.devicePanelOpen) syncBeautifiedSelect(modeSelect, '#nekocoffee-device-policy');
+
+        while (body.firstChild) body.removeChild(body.firstChild);
+        if (!draft.devices.length) {
+            var emptyRow = document.createElement('tr');
+            var emptyCell = document.createElement('td');
+            emptyCell.colSpan = 6;
+            emptyCell.className = 'nekocoffee-empty';
+            emptyCell.textContent = tr('noDevices', '未发现局域网设备，可手动添加 MAC 地址。');
+            emptyRow.appendChild(emptyCell);
+            body.appendChild(emptyRow);
+        } else {
+            draft.devices.forEach(function (device) {
+                var row = document.createElement('tr');
+                var name = document.createElement('td');
+                name.textContent = device.name || (device.configuredOnly
+                    ? tr('manualDevice', '手动设备') : tr('unknownDevice', '未知设备'));
+                var ip = document.createElement('td');
+                var ipCode = document.createElement('code');
+                ipCode.textContent = device.ip || '--';
+                ip.appendChild(ipCode);
+                var mac = document.createElement('td');
+                var macCode = document.createElement('code');
+                macCode.textContent = device.mac;
+                mac.appendChild(macCode);
+                var status = document.createElement('td');
+                status.className = 'nekocoffee-device-state' + (device.online ? ' is-online' : '');
+                status.textContent = device.online ? tr('onlineDevice', '在线') : tr('offlineDevice', '离线');
+                var proxy = document.createElement('td');
+                var toggle = document.createElement('label');
+                toggle.className = 'nekocoffee-toggle nekocoffee-device-switch';
+                var checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = device.proxy === true;
+                checkbox.disabled = !canEdit || state.busy;
+                checkbox.setAttribute('data-device-mac', device.mac);
+                var track = document.createElement('span');
+                track.className = 'nekocoffee-toggle-track';
+                track.appendChild(document.createElement('i'));
+                toggle.appendChild(checkbox);
+                toggle.appendChild(track);
+                proxy.appendChild(toggle);
+                var action = document.createElement('td');
+                if (device.configuredOnly || device.source === 'manual') {
+                    var remove = document.createElement('button');
+                    remove.type = 'button';
+                    remove.className = 'mwef-btn mwef-btn-small';
+                    remove.setAttribute('data-remove-device', device.mac);
+                    remove.textContent = tr('removeDevice', '移除');
+                    remove.disabled = !canEdit || state.busy;
+                    action.appendChild(remove);
+                } else {
+                    action.textContent = '--';
+                }
+                row.appendChild(name);
+                row.appendChild(ip);
+                row.appendChild(mac);
+                row.appendChild(status);
+                row.appendChild(proxy);
+                row.appendChild(action);
+                body.appendChild(row);
+            });
+        }
+
+        var proxyCount = 0;
+        draft.devices.forEach(function (device) { if (device.proxy) proxyCount += 1; });
+        setText('nekocoffee-device-summary', formatMessage(
+            'deviceSummaryCounts', '{count} 台设备，{proxy} 台走代理',
+            { count: draft.devices.length, proxy: proxyCount }
+        ));
+        var warning = byId('nekocoffee-device-ip-warning');
+        var policyWarnings = [];
+        if (draft.ipFilterCount > 0) policyWarnings.push(formatMessage(
+            'ipFilterWarning', 'ShellCrash 另有 {count} 条 IP/CIDR 过滤规则，仍会叠加生效。',
+            { count: draft.ipFilterCount }
+        ));
+        if (draft.firewallArea && String(draft.firewallArea) !== '1'
+            && String(draft.firewallArea) !== '3') {
+            policyWarnings.push(tr(
+                'deviceAreaWarning', '当前 ShellCrash 流量接管范围可能不包含普通局域网设备，设备策略可能不会生效。'
+            ));
+        }
+        warning.hidden = !policyWarnings.length;
+        warning.textContent = policyWarnings.join(' ');
+        byId('nekocoffee-manual-mac').disabled = !canEdit || state.busy;
+        byId('nekocoffee-add-device').disabled = !canEdit || state.busy;
+        byId('nekocoffee-refresh-devices').disabled = state.busy || !installed;
+        byId('nekocoffee-save-devices').disabled = !canEdit || state.busy || !state.dirtyDevices;
     }
 
     function renderProfiles(profiles, installation) {
@@ -287,6 +430,7 @@
         byId('nekocoffee-import-url').disabled = state.busy || !canImport;
         byId('nekocoffee-import-name').disabled = state.busy || !canImport;
         byId('nekocoffee-import-config').disabled = state.busy || !canImport;
+        renderDevices(data.devicePolicy, installation);
         renderProfiles(data.profiles, installation);
 
         var dashboardButton = byId('nekocoffee-dashboard');
@@ -406,6 +550,119 @@
             setText('nekocoffee-quic-proxy-state', this.checked ? tr('enabled', '已启用') : tr('disabled', '已关闭'));
         };
 
+        byId('nekocoffee-device-toggle').onclick = function () {
+            state.devicePanelOpen = !state.devicePanelOpen;
+            var panel = byId('nekocoffee-device-panel');
+            panel.hidden = !state.devicePanelOpen;
+            this.setAttribute('aria-expanded', state.devicePanelOpen ? 'true' : 'false');
+            this.setAttribute('data-i18n', state.devicePanelOpen ? 'collapse' : 'expand');
+            this.textContent = state.devicePanelOpen ? tr('collapse', '收起') : tr('expand', '展开');
+            if (state.devicePanelOpen) syncBeautifiedSelect(
+                byId('nekocoffee-device-mode'), '#nekocoffee-device-policy'
+            );
+        };
+
+        byId('nekocoffee-device-mode').onchange = function () {
+            if (!state.deviceDraft) return;
+            state.deviceDraft.mode = this.value === 'whitelist' ? 'whitelist' : 'blacklist';
+            state.dirtyDevices = true;
+            renderDevices(state.data && state.data.devicePolicy, state.data && state.data.installation);
+        };
+
+        byId('nekocoffee-device-list').onchange = function (event) {
+            var target = event.target || event.srcElement;
+            var mac = target && target.getAttribute ? target.getAttribute('data-device-mac') : null;
+            if (!mac || !state.deviceDraft) return;
+            state.deviceDraft.devices.forEach(function (device) {
+                if (device.mac === mac) device.proxy = target.checked === true;
+            });
+            state.dirtyDevices = true;
+            renderDevices(state.data && state.data.devicePolicy, state.data && state.data.installation);
+        };
+
+        byId('nekocoffee-device-list').onclick = function (event) {
+            var target = event.target || event.srcElement;
+            var mac = target && target.getAttribute ? target.getAttribute('data-remove-device') : null;
+            if (!mac || !state.deviceDraft || target.disabled) return;
+            var next = [];
+            state.deviceDraft.devices.forEach(function (device) {
+                if (device.mac !== mac) next.push(device);
+            });
+            state.deviceDraft.devices = next;
+            state.dirtyDevices = true;
+            renderDevices(state.data && state.data.devicePolicy, state.data && state.data.installation);
+        };
+
+        byId('nekocoffee-add-device').onclick = function () {
+            if (!state.deviceDraft) return;
+            var input = byId('nekocoffee-manual-mac');
+            var mac = normalizeMac(input.value);
+            if (!mac) {
+                showMessage(tr('invalidMac', '请输入有效的单播 MAC 地址。'), true);
+                return;
+            }
+            for (var index = 0; index < state.deviceDraft.devices.length; index += 1) {
+                if (state.deviceDraft.devices[index].mac === mac) {
+                    showMessage(tr('deviceExists', '该设备已经在列表中。'), true);
+                    return;
+                }
+            }
+            state.deviceDraft.devices.push({
+                mac: mac,
+                ip: '',
+                name: '',
+                online: false,
+                proxy: state.deviceDraft.mode === 'whitelist',
+                configuredOnly: true,
+                source: 'manual'
+            });
+            state.dirtyDevices = true;
+            input.value = '';
+            showMessage('');
+            renderDevices(state.data && state.data.devicePolicy, state.data && state.data.installation);
+        };
+
+        byId('nekocoffee-manual-mac').onkeydown = function (event) {
+            event = event || window.event;
+            if ((event.key && event.key === 'Enter') || event.keyCode === 13) {
+                if (event.preventDefault) event.preventDefault();
+                byId('nekocoffee-add-device').click();
+            }
+        };
+
+        byId('nekocoffee-refresh-devices').onclick = function () {
+            if (state.dirtyDevices
+                && !window.confirm(tr('confirmDiscardDeviceChanges', '刷新会丢弃尚未保存的设备更改，确定继续？'))) return;
+            state.dirtyDevices = false;
+            state.deviceDraft = null;
+            refresh(false);
+        };
+
+        byId('nekocoffee-save-devices').onclick = function () {
+            var draft = state.deviceDraft;
+            if (!draft || !state.dirtyDevices) return;
+            var macs = [];
+            draft.devices.forEach(function (device) {
+                if ((draft.mode === 'whitelist' && device.proxy)
+                    || (draft.mode === 'blacklist' && !device.proxy)) macs.push(device.mac);
+            });
+            if (draft.mode === 'whitelist' && !macs.length) {
+                showMessage(tr('emptyWhitelist', '默认直连时至少要选择一台走代理的设备。'), true);
+                return;
+            }
+            var running = state.data && state.data.installation && state.data.installation.running;
+            if (running && !window.confirm(tr(
+                'confirmDeviceRestart', '保存设备策略会重启正在运行的服务，代理连接将短暂中断。确定继续？'
+            ))) return;
+            runMutation('device-policy', {
+                mode: draft.mode,
+                macs: macs.join(',')
+            }, tr('devicePolicySaved', '设备策略已保存。'), function () {
+                state.dirtyDevices = false;
+                state.deviceDraft = null;
+            });
+        };
+
         byId('nekocoffee-dashboard').onclick = function () {
             var url = this.getAttribute('data-url');
             if (!url) return;
@@ -520,3 +777,4 @@
     bindEvents();
     loadTranslations().then(function () { return refresh(false); }).then(scheduleRefresh);
 }());
+
